@@ -26,6 +26,8 @@ import {
   GitMerge,
 } from 'lucide-react'
 import type { Course, Difficulty, Lesson, Module, VocabularyItem } from '@/lib/types'
+import { groupFiles } from '@/lib/grouping'
+import { roleLabel } from '@/lib/package'
 
 const difficultyColor: Record<Difficulty, string> = {
   beginner: '#10B981',
@@ -373,6 +375,30 @@ function LessonDetail({ lesson, module }: { lesson: Lesson; module: Module }) {
             </div>
           </div>
         )}
+        {lesson.materials.solutions && lesson.materials.solutions.content.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-[#6B7280] font-semibold mb-2">Solutions ({lesson.materials.solutions.content.length})</div>
+            <div className="space-y-1.5">
+              {lesson.materials.solutions.content.map((s, i) => (
+                <div key={i} className="text-xs text-[#10B981]/80 border-l-2 border-[rgba(16,185,129,0.3)] pl-2">
+                  {s}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {lesson.materials.teacherNotes && lesson.materials.teacherNotes.content.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-[#6B7280] font-semibold mb-2">Teacher&apos;s notes ({lesson.materials.teacherNotes.content.length})</div>
+            <div className="space-y-1.5">
+              {lesson.materials.teacherNotes.content.map((n, i) => (
+                <div key={i} className="text-xs text-[#A8A29E] border-l-2 border-[rgba(245,158,11,0.3)] pl-2">
+                  {n}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     ),
     recall: (
@@ -495,12 +521,19 @@ function ModuleTree({ course }: { course: Course }) {
                   <div className="border-t border-[rgba(250,248,245,0.06)] px-4 py-2 space-y-2">
                     {module.lessons.map((lesson, li) => {
                       const lessonOpen = openLesson === lesson.id
+                      const attached = course.sourceFiles.filter((f) => lesson.sourceAssets.includes(f.id))
+                      const media = attached.filter((f) => f.kind === 'audio' || f.kind === 'video')
                       return (
                         <div key={lesson.id} className="rounded-lg border border-[rgba(250,248,245,0.06)] bg-[rgba(250,248,245,0.02)] overflow-hidden">
                           <button onClick={() => setOpenLesson(lessonOpen ? null : lesson.id)} className="w-full flex items-center gap-2 p-3 text-left">
                             {lessonOpen ? <ChevronDown size={14} className="text-[#10B981] shrink-0" /> : <ChevronRight size={14} className="text-[#6B7280] shrink-0" />}
                             <span className="text-[10px] text-[#6B7280] w-6 shrink-0">L{li + 1}</span>
                             <span className="text-xs font-medium text-[#FAF8F5] flex-1">{lesson.title}</span>
+                            {media.length > 0 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgba(16,185,129,0.08)] border border-[rgba(16,185,129,0.2)] text-[#10B981] shrink-0">
+                                {media.length} audio/video
+                              </span>
+                            )}
                             <DifficultyBadge difficulty={lesson.difficulty} />
                           </button>
                           <AnimatePresence>
@@ -571,6 +604,17 @@ export default function CourseDashboard({ course }: { course: Course }) {
     { label: 'Exercises', value: course.stats.exercises, icon: GraduationCap, color: '#FBBF24' },
   ]
 
+  const folderGroups = groupFiles(course.sourceFiles)
+  const nameOfAsset = (id: string) => course.sourceFiles.find((f) => f.id === id)?.name
+  const displayDup = (item: string) => {
+    const idx = item.indexOf(':')
+    if (idx > 0) {
+      const name = nameOfAsset(item.slice(0, idx))
+      if (name) return `${name} · ${item.slice(idx + 1)}`
+    }
+    return item
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -594,8 +638,19 @@ export default function CourseDashboard({ course }: { course: Course }) {
           <div className="flex items-center gap-3 mt-1 text-[11px] text-[#6B7280]">
             {course.language && <span>{course.language}</span>}
             <span>{new Date(course.createdAt).toLocaleString()}</span>
-            <span>{course.sourceFiles.length} source file(s)</span>
+            <span>{folderGroups.length} material(s) · {course.sourceFiles.length} file(s)</span>
           </div>
+          {groupFiles(course.sourceFiles).length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {groupFiles(course.sourceFiles).map((group) => (
+                <span key={group.key} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(250,248,245,0.03)] border border-[rgba(250,248,245,0.08)] text-[#A8A29E]">
+                  {group.files[0].role ? `${roleLabel(group.files[0].role)} · ` : ''}
+                  {group.display}
+                  {group.files.length > 1 ? ` (${group.files.length})` : ''}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -682,7 +737,7 @@ export default function CourseDashboard({ course }: { course: Course }) {
                             : 'text-[#6B7280] border-[rgba(250,248,245,0.08)] bg-[rgba(250,248,245,0.02)] line-through'
                         }`}
                       >
-                        {item}
+                        {displayDup(item)}
                         {item === dup.kept && <span className="ml-1">· kept</span>}
                       </span>
                     ))}

@@ -21,11 +21,13 @@ import {
   AlertTriangle,
   Loader2,
   Search,
+  Folder as FolderIcon,
 } from 'lucide-react'
-import { parseAsset, isFake, fakeContent } from '@/lib/parse'
+import { detectKind, parseAsset, isFake, fakeContent } from '@/lib/parse'
+import { groupFiles, stemOf } from '@/lib/grouping'
 import { saveCourse, loadCourse, clearCourse } from '@/lib/storage'
 import CourseDashboard from '@/components/CourseDashboard'
-import type { Course, JobPhase, UploadedAsset } from '@/lib/types'
+import type { AssetKind, Course, JobPhase, UploadedAsset } from '@/lib/types'
 
 const examples = [
   { label: 'German A1 Textbook', icon: BookOpen, desc: 'PDF textbook', languages: 'German' },
@@ -48,10 +50,26 @@ const phases: { id: JobPhase; label: string; desc: string; icon: typeof Search }
 
 interface ParseEntry {
   file: File
+  path?: string
+  kind?: AssetKind
   asset?: UploadedAsset
   status: 'pending' | 'parsing' | 'ok' | 'empty' | 'failed'
   message?: string
 }
+
+const KIND_LABELS: Record<AssetKind, string> = {
+  pdf: 'PDF',
+  docx: 'DOCX',
+  epub: 'EPUB',
+  pptx: 'PPTX',
+  text: 'Text',
+  audio: 'Audio',
+  video: 'Video',
+  image: 'Image',
+  unknown: 'Unknown',
+}
+
+const HIDDEN_NAMES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini', '.gitkeep', '.gitignore'])
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -71,7 +89,13 @@ export default function UploadPage() {
   const [course, setCourse] = useState<Course | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [savedCourse, setSavedCourse] = useState<Course | null>(() => loadCourse())
+  const [skipped, setSkipped] = useState(0)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const entriesRef = useRef<ParseEntry[]>([])
+
+  useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
 
   useEffect(() => {
     return () => {
@@ -79,30 +103,94 @@ export default function UploadPage() {
     }
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    const dropped = Array.from(e.dataTransfer.files)
-    setEntries((prev) => [
-      ...prev,
-      ...dropped.map((file) => ({ file, status: 'pending' as const })),
-    ])
+  const parseEntry = useCallback(async (entry: ParseEntry): Promise<UploadedAsset | null> => {
+    setEntries((prev) => prev.map((e) => (e.file === entry.file ? { ...e, status: 'parsing' } : e)))
+    try {
+      let file = entry.file
+      if (isFake(file)) {
+        file = new File([fakeContent(file.name)], file.name, { type: 'application/pdf' })
+      }
+      const asset = await parseAsset(file)
+      asset.path = entry.path
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.file === entry.file
+            ? { ...e, asset, status: asset.text ? 'ok' : 'empty', message: asset.text ? undefined : 'Metadata only — will use context' }
+            : e
+        )
+      )
+      return asset
+    } catch {
+      setEntries((prev) => prev.map((e) => (e.file === entry.file ? { ...e, status: 'failed' } : e)))
+      return null
+    }
   }, [])
 
+  const autoParse = useCallback(
+    async (list: ParseEntry[]) => {
+      for (const entry of list) {
+        await parseEntry(entry)
+      }
+    },
+    [parseEntry]
+  )
+
+  const addFiles = useCallback(
+    (files: File[]) => {
+      const keys = new Set(entriesRef.current.map((e) => `${e.path ?? ''}|${e.file.name}|${e.file.size}`))
+      const fresh: ParseEntry[] = []
+      let skippedCount = 0
+      for (const raw of files) {
+        const path = (raw as File & { webkitRelativePath?: string }).webkitRelativePath ?? ''
+        const base = path ? path.split('/').pop() ?? raw.name : raw.name
+        if (base.startsWith('.') || HIDDEN_NAMES.has(base.toLowerCase())) {
+          skippedCount++
+          continue
+        }
+        const kind = detectKind(raw)
+        if (kind === 'unknown') {
+          skippedCount++
+          continue
+        }
+        const key = `${path}|${raw.name}|${raw.size}`
+        if (keys.has(key)) continue
+        keys.add(key)
+        fresh.push({ file: raw, path: path || undefined, kind, status: 'pending' })
+      }
+      if (skippedCount) setSkipped((s) => s + skippedCount)
+      if (fresh.length) {
+        setEntries((prev) => [...prev, ...fresh])
+        void autoParse(fresh)
+      }
+    },
+    [autoParse]
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragging(false)
+      addFiles(Array.from(e.dataTransfer.files))
+    },
+    [addFiles]
+  )
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selected = Array.from(e.target.files)
-      setEntries((prev) => [...prev, ...selected.map((file) => ({ file, status: 'pending' as const }))])
-    }
+    if (e.target.files) addFiles(Array.from(e.target.files))
     e.target.value = ''
   }
 
-  const removeEntry = (index: number) => {
-    setEntries((prev) => prev.filter((_, i) => i !== index))
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(Array.from(e.target.files))
+    e.target.value = ''
+  }
+
+  const removeEntry = (file: File) => {
+    setEntries((prev) => prev.filter((e) => e.file !== file))
   }
 
   const getFileIcon = (entry: ParseEntry) => {
-    const kind = entry.asset?.kind
+    const kind = entry.kind ?? entry.asset?.kind
     if (kind === 'audio' || kind === 'video') return <Mic size={14} className="text-[#10B981]" />
     if (kind === 'pdf') return <BookOpen size={14} className="text-[#059669]" />
     if (kind === 'image') return <FileIcon size={14} className="text-[#8B5CF6]" />
@@ -110,13 +198,14 @@ export default function UploadPage() {
   }
 
   const entryStatusText = (entry: ParseEntry) => {
-    if (entry.status === 'parsing') return 'Parsing…'
+    if (entry.status === 'parsing') return 'Detecting content…'
     if (entry.status === 'failed') return 'Failed'
     if (entry.status === 'empty') return 'No text extracted'
     if (entry.asset?.kind === 'audio') return `${entry.asset.durationSec ? Math.round(entry.asset.durationSec / 60) + ' min audio' : 'Audio'}`
     if (entry.asset?.kind === 'video') return `${entry.asset.durationSec ? Math.round(entry.asset.durationSec / 60) + ' min video' : 'Video'}`
     if (entry.asset?.kind === 'image') return 'Image'
     if (entry.asset?.words) return `${entry.asset.words.toLocaleString()} words`
+    if (entry.kind) return `${KIND_LABELS[entry.kind]} detected`
     return 'Ready'
   }
 
@@ -125,26 +214,13 @@ export default function UploadPage() {
     setError(null)
     setStage('parsing')
     const parsed: UploadedAsset[] = []
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]
-      setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, status: 'parsing' } : e)))
-      try {
-        let file = entry.file
-        if (isFake(file)) {
-          file = new File([fakeContent(entry.file.name)], entry.file.name, { type: 'application/pdf' })
-        }
-        const asset = await parseAsset(file)
-        parsed.push(asset)
-        setEntries((prev) =>
-          prev.map((e, idx) =>
-            idx === i
-              ? { ...e, asset, status: asset.text ? 'ok' : 'empty', message: asset.text ? undefined : 'Metadata only — will use context' }
-              : e
-          )
-        )
-      } catch {
-        setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, status: 'failed' } : e)))
+    for (const entry of entries) {
+      if (entry.asset) {
+        parsed.push(entry.asset)
+        continue
       }
+      const asset = await parseEntry(entry)
+      if (asset) parsed.push(asset)
     }
     const successful = parsed
     if (!successful.length) {
@@ -202,6 +278,7 @@ export default function UploadPage() {
     setCourse(null)
     setEntries([])
     setJob(null)
+    setSkipped(0)
   }
 
   return (
@@ -250,11 +327,22 @@ export default function UploadPage() {
                 <Upload size={24} className="text-white" />
               </div>
               <h3 className="text-lg font-semibold mb-1">
-                {dragging ? 'Drop your files here' : 'Upload your learning material'}
+                {dragging ? 'Drop your files or folder here' : 'Upload your learning material'}
               </h3>
-              <p className="text-sm text-[#A8A29E] mb-2">Drag & drop or click to browse</p>
-              <p className="text-xs text-[#6B7280]">PDF, EPUB, DOCX, PPTX, TXT, Markdown, MP3, WAV, M4A, MP4, Images</p>
+              <p className="text-sm text-[#A8A29E] mb-2">Drag & drop a folder or files, or click to browse</p>
+              <p className="text-xs text-[#6B7280] mb-4">PDF, EPUB, DOCX, PPTX, TXT, Markdown, MP3, WAV, M4A, MP4, Images</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  document.getElementById('folder-input')?.click()
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-[rgba(250,248,245,0.04)] border border-[rgba(250,248,245,0.1)] hover:border-[rgba(16,185,129,0.4)] hover:bg-[rgba(16,185,129,0.05)] transition-all"
+              >
+                <FolderIcon size={14} className="text-[#10B981]" />
+                Upload a folder — contents detected automatically
+              </button>
               <input id="file-input" type="file" multiple onChange={handleFileSelect} className="hidden" />
+              <input id="folder-input" type="file" {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} multiple onChange={handleFolderSelect} className="hidden" />
             </div>
           </motion.div>
         ) : (
@@ -377,35 +465,65 @@ export default function UploadPage() {
             </div>
           )}
 
+          {skipped > 0 && (
+            <div className="text-[11px] text-[#6B7280] mt-2">
+              Skipped {skipped} unsupported or hidden file(s) — only readable learning material is added.
+            </div>
+          )}
+
           {stage === 'idle' && entries.length === 0 ? (
             <div className="text-xs text-[#6B7280] text-center py-2">Selected files will be parsed and transformed into a full learning course.</div>
           ) : (
-            <div className="space-y-2">
-              {entries.map((entry, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-[rgba(250,248,245,0.02)]">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-[rgba(250,248,245,0.03)] flex items-center justify-center shrink-0">
-                      {getFileIcon(entry)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{entry.file.name}</div>
-                      <div className="text-[#6B7280] text-xs flex items-center gap-2">
-                        <span>({(entry.file.size / 1024 / 1024).toFixed(1)} MB)</span>
-                        <span className="flex items-center gap-1">
-                          {entry.status === 'parsing' && <Loader2 size={10} className="animate-spin text-[#F59E0B]" />}
-                          {entry.status === 'ok' && <CheckCircle2 size={10} className="text-[#10B981]" />}
-                          {entry.status === 'empty' && <Zap size={10} className="text-[#8B5CF6]" />}
-                          {entry.status === 'failed' && <AlertTriangle size={10} className="text-[#EF4444]" />}
-                          {entryStatusText(entry)}
-                        </span>
+            <div className="space-y-3">
+              {(() => {
+                const groups = groupFiles(entries.map((e) => ({ name: e.file.name, path: e.path })))
+                return groups.map((group) => {
+                  const groupEntries = entries.filter((e) => {
+                    const folder = e.path ? e.path.split('/')[0] : undefined
+                    return folder === group.folder && stemOf(e.file.name) === group.stem
+                  })
+                  const grouped = group.files.length > 1 || !!group.folder
+                  return (
+                    <div key={group.key}>
+                      {grouped && (
+                        <div className="flex items-center gap-2 px-1 pb-1.5">
+                          <FolderIcon size={12} className="text-[#F59E0B]" />
+                          <span className="text-[11px] font-semibold text-[#A8A29E]">{group.display}</span>
+                          <span className="text-[10px] text-[#6B7280]">{group.files.length} file(s)</span>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        {groupEntries.map((entry) => (
+                          <div key={entry.file.name} className="flex items-center justify-between p-3 rounded-lg bg-[rgba(250,248,245,0.02)]">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-[rgba(250,248,245,0.03)] flex items-center justify-center shrink-0">
+                                {getFileIcon(entry)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium truncate">{entry.file.name}</div>
+                                <div className="text-[#6B7280] text-xs flex items-center gap-2">
+                                  {entry.path && <span className="truncate max-w-[220px]">{entry.path.replace(`${group.folder}/`, '')}</span>}
+                                  <span>({(entry.file.size / 1024 / 1024).toFixed(1)} MB)</span>
+                                  <span className="flex items-center gap-1">
+                                    {entry.status === 'parsing' && <Loader2 size={10} className="animate-spin text-[#F59E0B]" />}
+                                    {entry.status === 'ok' && <CheckCircle2 size={10} className="text-[#10B981]" />}
+                                    {entry.status === 'empty' && <Zap size={10} className="text-[#8B5CF6]" />}
+                                    {entry.status === 'failed' && <AlertTriangle size={10} className="text-[#EF4444]" />}
+                                    {entryStatusText(entry)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <button onClick={() => removeEntry(entry.file)} className="text-[#6B7280] hover:text-[#ef4444] transition-colors p-1 shrink-0">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                  <button onClick={() => removeEntry(i)} className="text-[#6B7280] hover:text-[#ef4444] transition-colors p-1 shrink-0">
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                  )
+                })
+              })()}
             </div>
           )}
 

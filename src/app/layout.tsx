@@ -28,14 +28,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex relative">
+      <body className="h-screen overflow-hidden flex relative">
         <div className="noise-overlay" />
         <div className="orb orb-1" />
         <div className="orb orb-2" />
         <div className="orb orb-3" />
         <div className="mesh-bg" />
         <Sidebar />
-        <main className="flex-1 overflow-auto relative z-10">{children}</main>
+        <main className="flex-1 overflow-y-auto relative z-10">{children}</main>
       </body>
     </html>
   );

@@ -8,6 +8,7 @@ export interface UploadedAsset {
   kind: AssetKind
   mime: string
   size: number
+  path?: string
   text?: string
   durationSec?: number
   words?: number
@@ -27,7 +28,7 @@ export interface ConceptNode {
 export interface GraphEdge {
   from: string
   to: string
-  type: 'parent' | 'prerequisite' | 'related'
+  type: 'parent' | 'prerequisite' | 'related' | 'uses' | 'answers' | 'appears-in' | 'belongs-to'
 }
 
 export interface VocabularyItem {
@@ -65,6 +66,8 @@ export interface LessonMaterials {
   listening?: { title: string; transcript: string; questions: string[] }
   speaking: { roleplays: string[]; drills: string[]; recalls: string[] }
   writing: { prompts: string[]; criteria: string[] }
+  solutions?: { title: string; content: string[] }
+  teacherNotes?: { title: string; content: string[] }
 }
 
 export interface Lesson {
@@ -124,7 +127,13 @@ export interface Course {
     concepts: number
     duplicatesMerged: number
   }
-  sourceFiles: { name: string; kind: AssetKind; words: number }[]
+  sourceFiles: { id: string; name: string; kind: AssetKind; words: number; path?: string; role?: string }[]
+}
+
+export interface ChapterPart {
+  number: string
+  title: string
+  body: string[]
 }
 
 export interface Discovery {
@@ -139,6 +148,8 @@ export interface Discovery {
   exercises: { type: string; prompt: string }[]
   dialogues: string[]
   sentences: string[]
+  role?: string
+  numberedChapters?: ChapterPart[]
 }
 
 export interface Blueprint {
@@ -149,7 +160,7 @@ export interface Blueprint {
     title: string
     description: string
     difficulty: Difficulty
-    lessons: { id?: string; title: string; objectives: string[]; conceptIds: string[]; difficulty: Difficulty }[]
+    lessons: { id?: string; title: string; objectives: string[]; conceptIds: string[]; difficulty: Difficulty; sourceAssets?: string[]; number?: string }[]
   }[]
   concepts: ConceptNode[]
   duplicates: { kind: string; items: string[]; kept: string; rationale: string }[]

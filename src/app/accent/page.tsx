@@ -2,8 +2,9 @@
 
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Mic, Crosshair, TrendingUp, Zap, Repeat, Volume2 } from 'lucide-react'
+import { loadCourse } from '@/lib/storage'
 
 const focusAreas = [
   { name: 'Pronunciation', icon: Volume2, description: 'Individual sounds and phonemes', exercises: 24, gradient: 'from-[#059669] to-[#10B981]' },
@@ -31,6 +32,21 @@ const itemVariants = {
 
 export default function AccentPage() {
   const [selectedArea, setSelectedArea] = useState<string | null>(null)
+  const course = useMemo(() => loadCourse(), [])
+  const drillLesson = useMemo(() => {
+    if (!course) return null
+    const lessons = course.modules.flatMap((m) => m.lessons)
+    return lessons.find((l) => l.materials?.listening?.transcript || l.materials?.reading?.passage) ?? lessons[0] ?? null
+  }, [course])
+  const drillLine = useMemo(() => {
+    if (!drillLesson) return null
+    const text = drillLesson.materials?.listening?.transcript || drillLesson.materials?.reading?.passage
+    if (text) {
+      const first = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]/)?.[0]?.trim()
+      if (first) return first
+    }
+    return drillLesson.materials?.speaking?.recalls[0] ?? null
+  }, [drillLesson])
 
   return (
     <motion.div
@@ -123,15 +139,19 @@ export default function AccentPage() {
 
           <div className="p-4 rounded-lg bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] mb-4">
             <div className="text-sm text-[#A8A29E] mb-2">Listen and repeat:</div>
-            <div className="text-lg font-bold text-gradient">&quot;The thirty-three thieves thought...&quot;</div>
-            <div className="text-xs text-[#6B7280] mt-2">Focus on the /θ/ sound at the start of each word.</div>
+            <div className="text-lg font-bold text-gradient">
+              {drillLine ? `"${drillLine.length > 90 ? `${drillLine.slice(0, 90)}…` : drillLine}"` : '"The thirty-three thieves thought..."'}
+            </div>
+            <div className="text-xs text-[#6B7280] mt-2">
+              {drillLesson ? `From "${drillLesson.title}" · Focus on rhythm and stress.` : 'Focus on the /θ/ sound at the start of each word.'}
+            </div>
           </div>
 
           <div className="flex gap-2">
-            <button className="btn-primary">
+            <Link href="/speaking" className="btn-primary inline-flex items-center gap-2">
               <Mic size={14} />
               Start Practice
-            </button>
+            </Link>
             <button className="btn-secondary">
               <Repeat size={14} />
               Slower

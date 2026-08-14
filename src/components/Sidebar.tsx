@@ -48,7 +48,7 @@ export default function Sidebar() {
     <aside
       className={`${
         collapsed ? 'w-16' : 'w-56'
-      } min-h-screen glass border-r border-[rgba(250,248,245,0.06)] transition-all duration-200 flex flex-col shrink-0 relative z-10`}
+      } h-screen glass border-r border-[rgba(250,248,245,0.06)] transition-all duration-200 flex flex-col shrink-0 relative z-10`}
     >
       <div className="p-4 border-b border-[rgba(250,248,245,0.06)] flex items-center justify-between h-14">
         {!collapsed && (
@@ -72,7 +72,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 py-3 space-y-0.5">
+      <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => (
           <Link
             key={item.href}

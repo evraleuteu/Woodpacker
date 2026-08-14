@@ -1,11 +1,14 @@
 import { randomUUID } from 'crypto'
-import type { Blueprint, Course, Discovery, Lesson, LessonMaterials, Module, TransformJob, UploadedAsset } from './types'
+import type { Blueprint, Course, Discovery, Exercise, Lesson, LessonMaterials, Module, TransformJob, UploadedAsset } from './types'
 import { chatJson } from './llm'
-import { heuristicBlueprint, heuristicDiscover, heuristicMaterials } from './heuristics'
+import { heuristicDiscover, heuristicMaterials, classifyExercise, detectVocabulary, detectGrammar, detectExercises, splitSentences, grammarDifficultyOf } from './heuristics'
+import { buildPackagePlan, reconstructBlueprint, chapterGroupFor, lessonBody, lessonContext, type PackagePlan } from './package'
+
+const VALID_EXERCISE_TYPES = ['fill-blank', 'multiple-choice', 'translation', 'recall', 'pattern-drill', 'roleplay', 'comprehension', 'assessment'] as const
 
 const CHUNK_CHARS = 24000
 const CONCURRENCY = 4
-const MAX_LESSONS = 24
+const MAX_LESSONS = 80
 const jobs = new Map<string, TransformJob>()
 
 export function getJob(id: string): TransformJob | undefined {
@@ -27,6 +30,7 @@ function sanitizeAssets(raw: unknown[]): UploadedAsset[] {
       kind: (asset.kind as UploadedAsset['kind']) ?? 'unknown',
       mime: typeof asset.mime === 'string' ? asset.mime : '',
       size: typeof asset.size === 'number' ? asset.size : 0,
+      path: typeof asset.path === 'string' ? asset.path : undefined,
       text,
       durationSec: typeof asset.durationSec === 'number' ? asset.durationSec : undefined,
       words,
@@ -61,9 +65,10 @@ function chunkText(text: string): string[] {
 }
 
 const DISCOVERY_SYSTEM =
-  'You are an instructional designer and knowledge engineer. Extract structured learning content from raw text of uploaded study material. ' +
-  'Respond ONLY with valid JSON matching: ' +
-  '{"chapters":[{"title":"string"}],"topics":["string"],"concepts":[{"name":"string","definition":"string"}],' +
+  'You are a course detective working with extracted text from one uploaded study file. ' +
+  'Identify the chapter headings EXACTLY as the author wrote them, keeping their numbers (e.g. "Kapitel 3 Arbeit und Beruf", "Unit 2 — Travel"). ' +
+  'Never invent, renumber, merge or reorder chapters. Respond ONLY with valid JSON matching: ' +
+  '{"chapters":["string"],"topics":["string"],"concepts":[{"name":"string","definition":"string"}],' +
   '"vocabulary":[{"term":"string","definition":"string","example":"string"}],' +
   '"grammar":[{"name":"string","explanation":"string","examples":["string"]}],' +
   '"objectives":["string"],"exercises":[{"type":"string","prompt":"string"}],"dialogues":["string"],"sentences":["string"]}. ' +
@@ -132,26 +137,29 @@ async function llmDiscover(asset: UploadedAsset): Promise<Discovery | null> {
   }
 }
 
-const BLUEPRINT_SYSTEM =
-  'You are a curriculum architect. Given discovered content from uploaded learning materials, design a complete course: ' +
-  'modules, lessons, a knowledge graph, duplicate groups, and a dependency-ordered learning path. ' +
+const RECONSTRUCT_SYSTEM =
+  'You are a course detective. The uploaded files are connected parts of a single learning package ' +
+  '(Kursbuch, Übungsbuch, Unterrichtshandbuch, audio/video tracks). ' +
+  'Reconstruct the author\'s course: identify the main textbook (the spine), match chapters across files by number and title, ' +
+  'and attach workbook exercises, handbook solutions and media tracks to the matching chapter. ' +
+  'Do NOT create a new course. Do NOT invent chapters, modules, learning paths or content. Lessons ARE the author\'s chapters, in original order. ' +
   'Respond ONLY with valid JSON matching: ' +
   '{"title":"string","description":"string","language":"string",' +
   '"modules":[{"title":"string","description":"string","difficulty":"beginner|intermediate|advanced",' +
-  '"lessons":[{"title":"string","objectives":["string"],"conceptIds":["string"],"difficulty":"beginner|intermediate|advanced"}]}],' +
+  '"lessons":[{"title":"string","objectives":["string"],"conceptIds":["string"],"difficulty":"beginner|intermediate|advanced","sourceAssets":["string"]}]}],' +
   '"concepts":[{"id":"string","name":"string","definition":"string","difficulty":"beginner|intermediate|advanced",' +
   '"parentIds":["string"],"prerequisiteIds":["string"],"relatedIds":["string"]}],' +
   '"duplicates":[{"kind":"string","items":["string"],"kept":"string","rationale":"string"}],' +
   '"path":[{"id":"string","title":"string","type":"module|lesson|review|assessment","prerequisites":["string"]}]}. ' +
-  'Rules: conceptIds in lessons must reference ids in concepts. Concept ids must be stable strings. ' +
-  'Order modules/lessons from beginner to advanced. Prerequisite graph must be acyclic. ' +
-  'Cap at 8 modules and 24 lessons total. Duplicates only when real overlaps exist.'
+  'Rules: lesson titles are the author\'s chapter headings verbatim, in the order they appear in the textbook. ' +
+  'sourceAssets references the assetIds of every file that belongs to that chapter (workbook, handbook, audio, video). ' +
+  'Concept ids must be stable strings and conceptIds in lessons must reference them. Prerequisite graph must be acyclic.'
 
-async function llmBlueprint(discoveries: Discovery[]): Promise<Blueprint | null> {
+async function llmReconstruct(discoveries: Discovery[]): Promise<Blueprint | null> {
   if (!discoveries.length) return null
   const summary = discoveries.map((d) => ({
     file: d.assetName,
-    chapters: d.chapters.slice(0, 12),
+    chapters: d.chapters.slice(0, 30),
     topics: d.topics.slice(0, 12),
     concepts: d.concepts.slice(0, 15).map((c) => c.name),
     vocabulary: d.vocabulary.slice(0, 25).map((v) => v.term),
@@ -162,12 +170,12 @@ async function llmBlueprint(discoveries: Discovery[]): Promise<Blueprint | null>
   }))
   const result = await withRetry(() =>
     chatJson<Blueprint>(
-      BLUEPRINT_SYSTEM,
-      `DISCOVERED CONTENT ACROSS ALL FILES:\n${JSON.stringify(summary)}\n\nReturn the course blueprint JSON.`
+      RECONSTRUCT_SYSTEM,
+      `FILES IN THE PACKAGE:\n${JSON.stringify(summary)}\n\nReturn the reconstructed course JSON.`
     )
   )
   result.modules = (result.modules ?? []).slice(0, 8)
-  for (const m of result.modules) m.lessons = (m.lessons ?? []).slice(0, 8)
+  for (const m of result.modules) m.lessons = (m.lessons ?? []).slice(0, 30)
   let total = 0
   for (const m of result.modules) {
     total += m.lessons.length
@@ -219,35 +227,34 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
   return results
 }
 
-function assembleCourse(assets: UploadedAsset[], discoveries: Discovery[], blueprint: Blueprint, materialsMap: Map<string, Awaited<ReturnType<typeof llmMaterials>>>, mode: 'ai' | 'local'): Course {
-  const lessonMeta = new Map<string, { difficulty: Lesson['difficulty']; objectives: string[]; conceptIds: string[] }>()
-  for (const m of blueprint.modules) {
-    for (const l of m.lessons) {
-      lessonMeta.set(l.title.toLowerCase(), { difficulty: l.difficulty, objectives: l.objectives ?? [], conceptIds: l.conceptIds ?? [] })
-    }
-  }
+function assembleCourse(assets: UploadedAsset[], discoveries: Discovery[], blueprint: Blueprint, materialsMap: Map<string, Awaited<ReturnType<typeof llmMaterials>>>, mode: 'ai' | 'local', plan: PackagePlan): Course {
   const conceptById = new Map(blueprint.concepts.map((c) => [c.id, c]))
   const modules: Module[] = blueprint.modules.map((m, mi) => {
+    const planModule = plan.modules[mi]
     const lessons: Lesson[] = m.lessons.map((l, li) => {
-      const meta = lessonMeta.get(l.title.toLowerCase())
-      const sourceAssets = discoveries.filter((d) => d.chapters.some((c) => c.toLowerCase() === l.title.toLowerCase())).map((d) => d.assetId)
+      const group = chapterGroupFor(l.title, plan)
+      const groupAssets = new Set<string>([
+        planModule?.spine.assetId ?? '',
+        ...(group?.workbook.map((w) => w.assetId) ?? []),
+        ...(group?.handbook.map((h) => h.assetId) ?? []),
+        ...(group?.reference.map((r) => r.assetId) ?? []),
+        ...(group?.media.map((media) => media.id) ?? []),
+      ])
+      const sourceAssets = [...new Set([...(l.sourceAssets ?? []), ...groupAssets])].filter(Boolean)
       const fallbackAssets = sourceAssets.length ? sourceAssets : discoveries.map((d) => d.assetId)
-      const discovery = discoveries.find((d) => d.assetId === fallbackAssets[0])
       const generated = materialsMap.get(l.title.toLowerCase())
       const baseLesson: Lesson = {
         id: l.id ?? `l-${mi}-${li}`,
         title: l.title,
-        objectives: meta?.objectives ?? l.objectives ?? [],
-        difficulty: meta?.difficulty ?? l.difficulty ?? 'beginner',
-        conceptIds: meta?.conceptIds ?? l.conceptIds ?? [],
+        objectives: l.objectives ?? [],
+        difficulty: l.difficulty ?? 'beginner',
+        conceptIds: l.conceptIds ?? [],
         vocabulary: [],
         grammar: [],
         exercises: [],
         materials: { speaking: { roleplays: [], drills: [], recalls: [] }, writing: { prompts: [], criteria: [] } },
         sourceAssets: fallbackAssets,
       }
-      const srcVocabulary = discovery?.vocabulary ?? []
-      const srcGrammar = discovery?.grammar ?? []
       if (generated) {
         baseLesson.vocabulary = (generated.vocabulary ?? []).map((v, i) => ({
           id: `v-${mi}-${li}-${i}`,
@@ -288,14 +295,27 @@ function assembleCourse(assets: UploadedAsset[], discoveries: Discovery[], bluep
             prompts: (generated.writing?.prompts ?? []).slice(0, 4),
             criteria: (generated.writing?.criteria ?? []).slice(0, 4),
           },
+          solutions: generated.solutions,
+          teacherNotes: generated.teacherNotes,
         }
       } else {
-        const materials = heuristicMaterials(baseLesson, discoveries, kindOf(assets, fallbackAssets))
+        const body = lessonBody(group)
+        const context = lessonContext(group)
+        const spineDiscovery = discoveries.find((d) => d.assetId === planModule?.spine.assetId)
+        const chapterVocab = group ? detectVocabulary(body) : []
+        const srcVocabulary = chapterVocab.length >= 3 ? chapterVocab : spineDiscovery?.vocabulary ?? []
+        const srcGrammar = group ? detectGrammar(body) : spineDiscovery?.grammar ?? []
+        const srcExercises = group ? detectExercises(body) : spineDiscovery?.exercises ?? []
+        if (!baseLesson.objectives.length) {
+          baseLesson.objectives = splitSentences(body)
+            .filter((s) => /\b(learn|will be able|understand|practise|practice|know how to|use|sprechen|lesen|hören|schreiben)\b/i.test(s))
+            .slice(0, 3)
+        }
         baseLesson.vocabulary = srcVocabulary.slice(0, 12).map((v, i) => ({
           id: `v-${mi}-${li}-${i}`,
           term: v.term,
           definition: v.definition,
-          examples: [v.example, discovery?.sentences.find((s) => s.toLowerCase().includes(v.term.toLowerCase()))].filter(Boolean) as string[],
+          examples: [v.example, context.sentences.find((s) => s.toLowerCase().includes(v.term.toLowerCase()))].filter(Boolean) as string[],
           synonyms: [],
           pronunciation: undefined,
           sourceAssets: fallbackAssets,
@@ -307,16 +327,16 @@ function assembleCourse(assets: UploadedAsset[], discoveries: Discovery[], bluep
           explanation: g.explanation ?? `Focus on ${g.name}.`,
           examples: g.examples.slice(0, 3),
           commonMistakes: [],
-          difficulty: baseLesson.difficulty,
+          difficulty: grammarDifficultyOf(g.name),
           sourceAssets: fallbackAssets,
         }))
-        baseLesson.exercises = (discovery?.exercises ?? []).slice(0, 6).map((e, i) => ({
+        baseLesson.exercises = srcExercises.slice(0, 8).map((e, i) => ({
           id: `e-${mi}-${li}-${i}`,
-          type: 'assessment',
+          type: (VALID_EXERCISE_TYPES as readonly string[]).includes(e.type) ? (e.type as Exercise['type']) : classifyExercise(e.prompt).type,
           prompt: e.prompt,
           sourceAssets: fallbackAssets,
         }))
-        baseLesson.materials = materials
+        baseLesson.materials = heuristicMaterials(baseLesson, discoveries, context)
       }
       return baseLesson
     })
@@ -381,13 +401,8 @@ function assembleCourse(assets: UploadedAsset[], discoveries: Discovery[], bluep
       concepts: concepts.length,
       duplicatesMerged: (blueprint.duplicates ?? []).length,
     },
-    sourceFiles: assets.map((a) => ({ name: a.name, kind: a.kind, words: a.words ?? 0 })),
+    sourceFiles: assets.map((a) => ({ id: a.id, name: a.name, kind: a.kind, words: a.words ?? 0, path: a.path, role: plan.roles.get(a.id) })),
   }
-}
-
-function kindOf(assets: UploadedAsset[], assetIds: string[]): UploadedAsset['kind'] {
-  const kindById = new Map(assets.map((a) => [a.id, a.kind]))
-  return kindById.get(assetIds[0]) ?? 'pdf'
 }
 
 export async function runPipeline(job: TransformJob, rawAssets: unknown[]): Promise<void> {
@@ -417,7 +432,7 @@ export async function runPipeline(job: TransformJob, rawAssets: unknown[]): Prom
           discoveries.push({
             assetId: asset.id,
             assetName: asset.name,
-            chapters: [name],
+            chapters: [],
             topics: [name],
             concepts: [{ name, definition: `Audio/video track ${name}${duration}` }],
             vocabulary: [],
@@ -426,13 +441,15 @@ export async function runPipeline(job: TransformJob, rawAssets: unknown[]): Prom
             exercises: [],
             dialogues: [],
             sentences: [],
+            role: asset.kind === 'audio' ? 'audio' : 'video',
+            numberedChapters: [],
           })
         } else if (asset.kind === 'image') {
           const name = asset.name.replace(/\.[^.]+$/, '')
           discoveries.push({
             assetId: asset.id,
             assetName: asset.name,
-            chapters: [name],
+            chapters: [],
             topics: [name],
             concepts: [{ name, definition: 'Visual material included in this course.' }],
             vocabulary: [],
@@ -441,24 +458,27 @@ export async function runPipeline(job: TransformJob, rawAssets: unknown[]): Prom
             exercises: [],
             dialogues: [],
             sentences: [],
+            role: 'image',
+            numberedChapters: [],
           })
         }
       }
     }
-    setJob(job, { phase: 'structure-reconstruction', progress: 0.3, message: 'Reconstructing course structure', detail: 'Ignoring file names and rebuilding modules, lessons and concepts in optimal learning order.' })
+    setJob(job, { phase: 'structure-reconstruction', progress: 0.3, message: 'Reconstructing course structure', detail: 'Connecting files into one learning package — matching chapters, exercises, audio and solutions across Kursbuch, Übungsbuch and Unterrichtshandbuch.' })
 
+    const plan = buildPackagePlan(assets, discoveries)
     let blueprint: Blueprint
     try {
       if (!llmOk) throw new Error('local mode')
-      const bp = await llmBlueprint(discoveries)
+      const bp = await llmReconstruct(discoveries)
       if (!bp) throw new Error('empty blueprint')
       blueprint = bp
     } catch {
-      blueprint = heuristicBlueprint(discoveries)
+      blueprint = reconstructBlueprint(assets, discoveries)
     }
 
     setJob(job, { phase: 'knowledge-graph', progress: 0.45, message: 'Building knowledge graph', detail: `Linking ${blueprint.concepts.length} concepts with prerequisites and relationships.` })
-    setJob(job, { phase: 'duplicate-detection', progress: 0.5, message: 'Detecting duplicates', detail: `Merging ${blueprint.duplicates.length} duplicate groups across materials.` })
+    setJob(job, { phase: 'duplicate-detection', progress: 0.5, message: 'Connecting chapters across files', detail: `Attaching ${blueprint.duplicates.length} file-to-chapter links (exercises, solutions, audio).` })
 
     setJob(job, { phase: 'material-generation', progress: 0.55, message: 'Generating learning materials', detail: 'Creating vocabulary cards, grammar, reading, listening, speaking, writing and exercises per lesson.' })
     const allLessons = blueprint.modules.flatMap((m) => m.lessons)
@@ -480,7 +500,7 @@ export async function runPipeline(job: TransformJob, rawAssets: unknown[]): Prom
     setJob(job, { phase: 'dependency-mapping', progress: 0.82, message: 'Mapping dependencies', detail: 'Determining what must be learned before what.' })
     setJob(job, { phase: 'master-tree', progress: 0.9, message: 'Assembling master learning tree', detail: 'Building the course dashboard with reviews and final assessment.' })
 
-    const course = assembleCourse(assets, discoveries, blueprint, materialsMap, finalMode)
+    const course = assembleCourse(assets, discoveries, blueprint, materialsMap, finalMode, plan)
     setJob(job, { phase: 'done', progress: 1, status: 'done', mode: finalMode, message: 'Transformation complete', detail: '', result: course })
   } catch (err) {
     setJob(job, { status: 'error', message: 'Transformation failed', detail: err instanceof Error ? err.message : 'Unknown error', error: err instanceof Error ? err.message : 'Unknown error' })

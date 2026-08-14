@@ -1,23 +1,20 @@
 'use client'
 
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { BookOpen, Mic, Crosshair, Upload, RefreshCw, Headphones, Diamond, BarChart3, Flame, Trophy } from 'lucide-react'
+import { BookOpen, Mic, Crosshair, Upload, RefreshCw, Headphones, Diamond, BarChart3, Flame, Trophy, PenLine } from 'lucide-react'
+import { loadCourse } from '@/lib/storage'
+import { buildPracticePlan, PRACTICE_META, PRACTICE_COLORS, PRACTICE_DIMENSIONS, type PracticeDimension } from '@/lib/plan'
 
-const skillAreas = [
-  { name: 'Vocabulary', icon: BookOpen, count: 342, mastered: 156, color: 'from-[#059669] to-[#10B981]' },
-  { name: 'Grammar', icon: BookOpen, count: 128, mastered: 64, color: 'from-[#10B981] to-[#34D399]' },
-  { name: 'Reading', icon: BookOpen, count: 48, mastered: 22, color: 'from-[#059669] to-[#10B981]' },
-  { name: 'Listening', icon: Headphones, count: 36, mastered: 18, color: 'from-[#D97706] to-[#F59E0B]' },
-  { name: 'Patterns', icon: Diamond, count: 89, mastered: 23, color: 'from-[#10B981] to-[#34D399]' },
-]
-
-const recentDecks = [
-  { name: 'Food & Restaurant', type: 'Vocabulary', items: 42, progress: 75 },
-  { name: 'Dative Case', type: 'Grammar', items: 24, progress: 60 },
-  { name: 'A1 Dialogues', type: 'Reading', items: 12, progress: 90 },
-  { name: 'Ich möchte...', type: 'Pattern', items: 8, progress: 45 },
-]
+const DIM_ICONS: Record<PracticeDimension, typeof BookOpen> = {
+  vocabulary: BookOpen,
+  grammar: Diamond,
+  listening: Headphones,
+  reading: BookOpen,
+  hearing: Mic,
+  speaking: PenLine,
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,6 +27,47 @@ const itemVariants = {
 }
 
 export default function LanguagePage() {
+  const course = useMemo(() => loadCourse(), [])
+  const plan = useMemo(() => (course ? buildPracticePlan(course) : null), [course])
+
+  const decks = PRACTICE_DIMENSIONS.map((dimension) => ({
+    dimension,
+    icon: DIM_ICONS[dimension],
+    items: (plan?.items ?? []).filter((i) => i.dimension === dimension),
+  }))
+  const totalItems = plan?.items.length ?? 0
+  const maxItems = Math.max(1, ...decks.map((d) => d.items.length))
+  const totalMinutes = decks.reduce((n, d) => n + Math.ceil(d.items.length * PRACTICE_META[d.dimension].perItemMinutes), 0)
+  const lessons = course?.modules.flatMap((m) => m.lessons) ?? []
+  const decksByLesson = lessons.slice(0, 6).map((l) => ({
+    id: l.id,
+    name: l.title,
+    module: course!.modules.find((m) => m.lessons.some((x) => x.id === l.id))?.title ?? 'Lesson',
+    type: 'Lesson',
+    items: l.vocabulary.length + l.grammar.length + l.exercises.length + l.materials.speaking.recalls.length,
+    progress: 0,
+  }))
+
+  if (!course || !plan) {
+    return (
+      <motion.div variants={containerVariants} initial="hidden" animate="visible" className="p-8 max-w-6xl mx-auto">
+        <motion.div variants={itemVariants} className="glass-card rounded-xl p-14 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center mx-auto mb-4 ai-glow">
+            <BookOpen size={22} className="text-white" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight mb-2">Language Mastery</h1>
+          <p className="text-sm text-[#A8A29E] mb-6 max-w-md mx-auto">
+            Upload materials first — your skill areas and decks will be built from them automatically.
+          </p>
+          <Link href="/upload" className="btn-primary inline-flex items-center gap-2 text-sm">
+            <Upload size={14} />
+            Upload your first materials
+          </Link>
+        </motion.div>
+      </motion.div>
+    )
+  }
+
   return (
     <motion.div
       variants={containerVariants}
@@ -45,22 +83,25 @@ export default function LanguagePage() {
           <h1 className="text-3xl font-bold tracking-tight">Language Mastery</h1>
         </div>
         <p className="text-[#A8A29E] text-sm">
-          Understand the language. Track your progress across all skill areas.
+          {course.title} · {course.stats.lessons} lessons across all skill areas.
         </p>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="grid grid-cols-5 gap-4 mb-8">
-        {skillAreas.map((area) => (
-          <div key={area.name} className="glass-card rounded-xl p-5 text-center">
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${area.color} flex items-center justify-center mx-auto mb-3`}>
+      <motion.div variants={itemVariants} className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-8">
+        {decks.map((area) => (
+          <div key={area.dimension} className="glass-card rounded-xl p-5 text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center mx-auto mb-3">
               <area.icon size={16} className="text-white" />
             </div>
-            <h3 className="font-semibold text-sm">{area.name}</h3>
-            <div className="text-xs text-[#A8A29E] mt-1">{area.count} items</div>
+            <h3 className="font-semibold text-sm">{PRACTICE_META[area.dimension].label}</h3>
+            <div className="text-xs text-[#A8A29E] mt-1">{area.items.length} items</div>
             <div className="progress-bar mt-3">
-              <div className="progress-bar-fill" style={{ width: `${(area.mastered / area.count) * 100}%` }} />
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${(area.items.length / maxItems) * 100}%`, background: PRACTICE_COLORS[area.dimension] }}
+              />
             </div>
-            <div className="text-xs text-gradient mt-1">{area.mastered} mastered</div>
+            <div className="text-xs text-gradient mt-1">{Math.ceil(area.items.length * PRACTICE_META[area.dimension].perItemMinutes)} min/day</div>
           </div>
         ))}
       </motion.div>
@@ -69,11 +110,11 @@ export default function LanguagePage() {
         <div className="glass-card rounded-xl p-6">
           <h2 className="font-semibold text-sm mb-4">Active Decks</h2>
           <div className="space-y-3">
-            {recentDecks.map((deck) => (
-              <div key={deck.name} className="flex items-center justify-between p-3 rounded-lg bg-[rgba(250,248,245,0.02)]">
+            {decksByLesson.map((deck) => (
+              <div key={deck.id} className="flex items-center justify-between p-3 rounded-lg bg-[rgba(250,248,245,0.02)]">
                 <div>
                   <div className="text-sm font-medium">{deck.name}</div>
-                  <div className="text-xs text-[#6B7280]">{deck.type} &middot; {deck.items} items</div>
+                  <div className="text-xs text-[#6B7280]">{deck.module} &middot; {deck.items} items</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-20 progress-bar">
@@ -83,6 +124,7 @@ export default function LanguagePage() {
                 </div>
               </div>
             ))}
+            {decksByLesson.length === 0 && <div className="text-xs text-[#6B7280] py-2">No lessons yet.</div>}
           </div>
           <Link href="/materials" className="block text-center text-xs text-gradient hover:opacity-80 mt-4">
             View all language materials →
@@ -93,10 +135,10 @@ export default function LanguagePage() {
           <h2 className="font-semibold text-sm mb-4">Learning Progress</h2>
           <div className="space-y-3">
             {[
-              { label: 'Total Items Learned', value: 423, change: '+28 this week', icon: Trophy, color: 'from-[#059669] to-[#10B981]' },
-              { label: 'Mastery Rate', value: '68%', change: '+5% this week', icon: BarChart3, color: 'from-[#10B981] to-[#34D399]' },
-              { label: 'Active Materials', value: 3, change: 'German, French, Spanish', icon: BookOpen, color: 'from-[#059669] to-[#10B981]' },
-              { label: 'Study Streak', value: '5 days', change: 'Best: 12 days', icon: Flame, color: 'from-[#D97706] to-[#F59E0B]' },
+              { label: 'Total Practice Items', value: String(totalItems), change: `~${totalMinutes} min/day`, icon: Trophy, color: 'from-[#059669] to-[#10B981]' },
+              { label: 'Vocabulary Terms', value: String(course.stats.vocabulary), change: 'from your materials', icon: BarChart3, color: 'from-[#10B981] to-[#34D399]' },
+              { label: 'Grammar Rules', value: String(course.stats.grammar), change: 'detected in your materials', icon: BookOpen, color: 'from-[#059669] to-[#10B981]' },
+              { label: 'Exercises', value: String(course.stats.exercises), change: `${course.stats.lessons} lessons`, icon: Flame, color: 'from-[#D97706] to-[#F59E0B]' },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between p-3 rounded-lg bg-[rgba(250,248,245,0.02)]">
                 <div className="flex items-center gap-3">
