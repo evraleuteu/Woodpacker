@@ -93,6 +93,7 @@ Creates repetition cycles for language learning.
 ## Knowledge Mastery (Premium — Coming Soon)
 
 Knowledge Graph, Mastery Engine, and Recall systems for Medicine, Engineering, Law, Nursing, and Certifications will be available in the Mastery plan.
+
 ## Pipeline
 
 ```

@@ -1,6 +1,13 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import Link from 'next/link'
+import {
+  Upload,
+  BookOpen,
+  Mic,
+  FileText,
+} from 'lucide-react'
 
 const materials = [
   {
@@ -35,115 +42,113 @@ const materials = [
   },
 ]
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+}
+
 export default function MaterialsPage() {
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="p-8 max-w-6xl mx-auto"
+    >
+      <motion.div variants={itemVariants} className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-2xl font-bold">My Language Materials</h1>
-          <p className="text-muted text-sm mt-1">Your uploaded textbooks, courses, and notes.</p>
+          <h1 className="text-3xl font-bold tracking-tight">My Language Materials</h1>
+          <p className="text-[#A8A29E] text-sm mt-1">Your uploaded textbooks, courses, and notes.</p>
         </div>
         <Link
           href="/upload"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-wood-600 hover:bg-wood-500 text-white text-sm font-medium transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#059669] to-[#10B981] text-white text-sm font-medium transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-[0.97]"
         >
-          ↑ Upload New
+          <Upload size={14} />
+          Upload New
         </Link>
-      </div>
+      </motion.div>
 
-      <div className="space-y-4">
+      <motion.div variants={itemVariants} className="space-y-4">
         {materials.map((m) => (
-          <div
-            key={m.id}
-            className="rounded-xl border border-border bg-surface p-5 hover:border-wood-500/30 transition-all"
-          >
+          <div key={m.id} className="glass-card rounded-xl p-6 transition-all">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-surface-lighter flex items-center justify-center text-lg shrink-0">
-                  {m.type === 'Book' ? '📚' : m.type === 'Audio' ? '🎵' : '📝'}
+                <div className="w-10 h-10 rounded-xl bg-[rgba(250,248,245,0.03)] flex items-center justify-center shrink-0">
+                  {m.type === 'Book' ? <BookOpen size={16} className="text-[#10B981]" /> : m.type === 'Audio' ? <Mic size={16} className="text-[#059669]" /> : <FileText size={16} className="text-[#F59E0B]" />}
                 </div>
                 <div>
                   <h3 className="font-semibold">{m.title}</h3>
-                  <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
+                  <div className="flex items-center gap-2 text-xs text-[#6B7280] mt-0.5">
                     <span>{m.type}</span>
-                    <span>·</span>
+                    <span>&middot;</span>
                     <span>{m.language}</span>
-                    <span>·</span>
+                    <span>&middot;</span>
                     <span>Uploaded {m.uploaded}</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
+                  className={`text-xs px-2 py-0.5 rounded-full border ${
                     m.status === 'Active'
-                      ? 'bg-wood-600/20 text-wood-400 border border-wood-600/30'
+                      ? 'bg-[rgba(16,185,129,0.1)] text-[#10B981] border-[rgba(16,185,129,0.2)]'
                       : m.status === 'Processing'
-                      ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                      : 'bg-amber-600/20 text-amber-400 border border-amber-600/30'
+                      ? 'bg-[rgba(245,158,11,0.1)] text-[#F59E0B] border-[rgba(245,158,11,0.2)]'
+                      : 'bg-[rgba(107,114,128,0.1)] text-[#6B7280] border-[rgba(107,114,128,0.2)]'
                   }`}
                 >
                   {m.status}
                 </span>
-                <span className="text-sm font-semibold text-wood-400">{m.progress}%</span>
+                <span className="text-sm font-semibold text-gradient">{m.progress}%</span>
               </div>
             </div>
 
-            {/* Progress Bar */}
-            <div className="w-full h-1.5 rounded-full bg-surface-lighter mb-4 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-wood-500 transition-all"
-                style={{ width: `${m.progress}%` }}
-              />
+            <div className="progress-bar mb-4">
+              <div className="progress-bar-fill" style={{ width: `${m.progress}%` }} />
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-5 gap-3">
               {[
                 { label: 'Lessons', value: m.stats.lessons },
-                { label: 'Vocabulary Items', value: m.stats.vocabulary },
-                { label: 'Grammar Points', value: m.stats.grammar },
-                { label: 'Speaking Prompts', value: m.stats.speaking },
+                { label: 'Vocabulary', value: m.stats.vocabulary },
+                { label: 'Grammar', value: m.stats.grammar },
+                { label: 'Speaking', value: m.stats.speaking },
                 { label: 'Patterns', value: m.stats.chapters },
               ].map((stat) => (
-                <div key={stat.label} className="text-center p-2 rounded-lg bg-surface-lighter">
+                <div key={stat.label} className="text-center p-2.5 rounded-lg bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)]">
                   <div className="text-sm font-bold">{stat.value}</div>
-                  <div className="text-xs text-muted">{stat.label}</div>
+                  <div className="text-xs text-[#6B7280]">{stat.label}</div>
                 </div>
               ))}
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2 mt-4 pt-3 border-t border-border">
+            <div className="flex gap-2 mt-4 pt-3 border-t border-[rgba(250,248,245,0.06)]">
               <Link
                 href="/speaking"
-                className="px-3 py-1.5 rounded-lg bg-wood-600/10 border border-wood-600/20 text-wood-400 text-xs font-medium hover:bg-wood-600/20 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[rgba(16,185,129,0.1)] to-[rgba(5,150,105,0.08)] border border-[rgba(16,185,129,0.2)] text-[#10B981] text-xs font-medium hover:border-[rgba(16,185,129,0.35)] transition-all"
               >
-                🎤 Start Speaking
+                <Mic size={12} />
+                Start Speaking
               </Link>
               <Link
                 href="/cycles"
-                className="px-3 py-1.5 rounded-lg bg-surface-lighter border border-border text-xs text-muted hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-xs text-[#6B7280] hover:text-[#FAF8F5] transition-all"
               >
-                ⟳ Review Cycles
+                Review Cycles
               </Link>
-              <button className="px-3 py-1.5 rounded-lg bg-surface-lighter border border-border text-xs text-muted hover:text-foreground transition-colors">
-                📊 Details
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-xs text-[#6B7280] hover:text-[#FAF8F5] transition-all">
+                Details
               </button>
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Knowledge Mastery Premium Teaser */}
-      <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-600/5 p-4 flex items-center gap-3">
-        <span className="text-lg">🧠</span>
-        <div>
-          <div className="text-sm font-medium">Need to study Medicine, Engineering, or Law?</div>
-          <div className="text-xs text-muted">Knowledge Mastery is coming soon as a premium feature.</div>
-        </div>
-        <span className="text-xs text-amber-400 ml-auto">Mastery Plan</span>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

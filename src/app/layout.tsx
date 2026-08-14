@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Woodpecker AI — Mastery Operating System",
-  description: "Transform any learning material into a scientifically structured repetition and recall program.",
+  title: "Woodpecker — Master Languages Through Repetition",
+  description: "Upload your books, lessons and audio. Woodpecker turns them into a personalised mastery system.",
 };
 
 export default function RootLayout({
@@ -28,9 +28,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex">
+      <body className="min-h-full flex relative">
+        <div className="noise-overlay" />
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="mesh-bg" />
         <Sidebar />
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto relative z-10">{children}</main>
       </body>
     </html>
   );
