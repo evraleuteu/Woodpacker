@@ -1,21 +1,29 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Manrope, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Woodpecker — Master Languages Through Repetition",
-  description: "Upload your books, lessons and audio. Woodpecker turns them into a personalised mastery system.",
+  title: "Woodpacker — Master Any Language Through Intelligent Repetition",
+  description: "Upload books, courses, PDFs, audio lessons, and exercises. Woodpacker automatically transforms them into a personalized speaking, listening, reading, and vocabulary mastery system.",
 };
 
 export default function RootLayout({
@@ -26,16 +34,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${manrope.variable} ${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
-      <body className="h-screen overflow-hidden flex relative">
-        <div className="noise-overlay" />
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
-        <div className="mesh-bg" />
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto relative z-10">{children}</main>
+      <body className="h-screen overflow-hidden flex bg-[#FAFBFC] text-[#111827] relative">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

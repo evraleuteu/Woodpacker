@@ -58,12 +58,122 @@ const CHAPTER_PATTERNS = [
   /^[A-ZÀ-Ž][A-ZÀ-Ž0-9\s'’:\-&]{4,60}$/,
 ]
 
+const NOISE_CHAPTER_PATTERNS: RegExp[] = [
+  /^NP\d{5,}$/i, // NP00860534401
+  /ISBN/i,
+  /Auflage/i,
+  /Printed in/i,
+  /^INHALT$/i,
+  /^CONTENTS?$/i,
+  /^IMPRESSUM$/i,
+  /^VORWORT$/i,
+  /^EINFÜHRUNG$/i,
+  /^EINLEITUNG$/i,
+  /^INTRODUCTION$/i, // will be dropped if no exercises (handled later)
+  /^\d+\s*[|]\s*\d{4}/, // "1 4 3 2 | 2025"
+  /^\d{4}\s+\d{2}(\s+\d{2})*$/, // "2025 24 23"
+  /^\d+(?:\s+\d+){3,}\s*\|/, // "1 4 3 2 | 2025"
+  /^[A-Z0-9\-]{8,}$/, // pure identifier like NP00860534401 without spaces
+  /^KONTEXT\s+B2/i, // book title, not a chapter
+  /^UNTERRICHTSHANDBUCH/i,
+]
+
+function isNoiseChapterTitle(title: string): boolean {
+  const t = title.trim()
+  if (t.length < 2) return true
+  // Pure numeric / identifier
+  if (/^[A-Z]*0{2,}[A-Z0-9\-]*$/.test(t) && t.replace(/[^A-Z0-9]/g, '').length >= 8) return true
+  return NOISE_CHAPTER_PATTERNS.some((p) => p.test(t))
+}
+
+export { isNoiseChapterTitle }
+
+/**
+ * Canonical exercise naming: "<type> <label> (p. X)" or "<type> <label> (pp. X-Y)".
+ * Type comes from the spec list (matching, fill_blank, multiple_choice, reading,
+ * listening, writing, speaking, grammar, vocabulary, ordering, drag_drop,
+ * true_false, short_answer, essay). Label is the author's printed label
+ * ("Aufgabe 5a", "Übung 3b") when available.
+ */
+const EXERCISE_TYPE_CANON: Record<string, string> = {
+  'fill-blank': 'fill_blank',
+  'fill_blank': 'fill_blank',
+  'multiple-choice': 'multiple_choice',
+  'multiple_choice': 'multiple_choice',
+  'matching': 'matching',
+  'match': 'matching',
+  'reading': 'reading',
+  'comprehension': 'reading',
+  'listening': 'listening',
+  'writing': 'writing',
+  'speaking': 'speaking',
+  'roleplay': 'speaking',
+  'grammar': 'grammar',
+  'vocabulary': 'vocabulary',
+  'recall': 'vocabulary',
+  'ordering': 'ordering',
+  'order': 'ordering',
+  'drag_drop': 'drag_drop',
+  'drag-drop': 'drag_drop',
+  'true_false': 'true_false',
+  'true-false': 'true_false',
+  'short_answer': 'short_answer',
+  'short-answer': 'short_answer',
+  'essay': 'essay',
+  'assessment': 'short_answer',
+  'translation': 'short_answer',
+  'pattern-drill': 'speaking',
+  'pattern_drill': 'speaking',
+}
+
+export function canonicalExerciseType(type?: string): string {
+  if (!type) return 'short_answer'
+  return EXERCISE_TYPE_CANON[type.toLowerCase().trim()] ?? type.toLowerCase().trim()
+}
+
+/** Parse "S. 45", "S. 45-47", "Seite 45", "p. 45" → {start,end}. */
+function parsePageRange(page?: string): { start?: number; end?: number } {
+  if (!page) return {}
+  const m = String(page).match(/(\d+)\s*(?:[-–]\s*(\d+))?/)
+  if (!m) return {}
+  const start = parseInt(m[1], 10)
+  const end = m[2] ? parseInt(m[2], 10) : start
+  return { start, end }
+}
+
+/**
+ * Builds a display title like:
+ *   "fill_blank Aufgabe 5a · S. 45"
+ *   "matching Übung 3 · S. 11-13"
+ *   "listening Track 12 · S. 45"
+ */
+export function formatExerciseTitle(opts: { type?: string; name?: string; page?: string; labelFallback?: string }): string {
+  const type = canonicalExerciseType(opts.type)
+  const label = (opts.name || opts.labelFallback || '').trim()
+  const { start, end } = parsePageRange(opts.page)
+  let pageStr = ''
+  if (start != null) {
+    pageStr = end != null && end !== start ? ` · S. ${start}-${end}` : ` · S. ${start}`
+  }
+  return label ? `${type} ${label}${pageStr}` : `${type}${pageStr}`
+}
+
 const EXERCISE_PATTERNS = [
   /^(exercise|task|activity|practice|worksheet|quiz|test|exam)\s*[#\d:.\-]*/i,
   /^(aufgabe|übung|übungsteil)\s*[#\d:.\-]*/i,
   /^(exercice|activité)\s*[#\d:.\-]*/i,
   /^(ejercicio|actividad|tarea)\s*[#\d:.\-]*/i,
+  /^[a-z]\s+(lesen|ergänzen|flüssig|markieren|notieren|beantworten|wie|warum|gründe|persönlichkeitstest)/i,
+  /^\d+\s*[a-z]?\s+(persönlichkeitstest|dein|deine|die schulzeit|beantworten|lesen)/i,
+  /^(lesen|ergänzen|flüssig|markieren|notieren|beantworten|wie flexibel|gründe ausdrücken)/i,
 ]
+
+const PAGE_MARKER = /^\[PAGE (\d+)\]$/
+
+function exerciseLabelOf(line: string): string | undefined {
+  const label = line.trim().split(/[:.)]/)[0].trim()
+  return label.length > 0 && label.length <= 40 ? label : undefined
+}
 
 const NOISE_CONCEPTS = new Set(
   'kapitel chapter lesson lektion unit exercise übung task activity worksheet part section module step theme topic means form forms word words sentence sentences question questions answer answers practice exercises beispiel example examples lernen learn lesen read write writing reading listening speaking grammar vocab vocabulary numbers greetings'.split(' ')
@@ -81,9 +191,15 @@ export function detectChapters(lines: string[]): { title: string; body: string[]
   let current: { title: string; body: string[] } | null = null
   for (const line of lines) {
     const trimmed = line.trim()
-    if (!trimmed) continue
+    if (!trimmed || PAGE_MARKER.test(trimmed)) continue
     const isHeader = trimmed.length <= 90 && (CHAPTER_PATTERNS.some((p) => p.test(trimmed)) || /^\d+\.\s+\S/.test(trimmed))
     if (isHeader && trimmed.length <= 90) {
+      // Skip noise titles (ISBN, NP00…, Auflage, INHALT, imprint pages, book title, etc.)
+      if (isNoiseChapterTitle(trimmed)) {
+        // noise: keep body flowing into the previous real chapter if one exists
+        if (current) current.body.push(trimmed)
+        continue
+      }
       current = { title: trimmed, body: [] }
       chapters.push(current)
     } else if (current) {
@@ -96,7 +212,17 @@ export function detectChapters(lines: string[]): { title: string; body: string[]
       }
     }
   }
-  return chapters.length ? chapters : [{ title: 'Course Material', body: lines.filter((l) => l.trim()) }]
+  // Drop front-matter sections with no exercise content (Introduction, INHALT etc.)
+  const meaningful = chapters.filter((c) => {
+    if (isNoiseChapterTitle(c.title)) return false
+    if (c.title === 'Introduction' || c.title === 'Course Material') {
+      // keep only if it contains exercise markers or substantial body
+      const hasExercise = c.body.some((l) => EXERCISE_PATTERNS.some((p) => p.test(l)) || /___|\?$/.test(l))
+      return hasExercise || c.body.length > 6
+    }
+    return true
+  })
+  return meaningful.length ? meaningful : [{ title: 'Course Material', body: lines.filter((l) => l.trim()) }]
 }
 
 export function detectVocabulary(text: string): { term: string; definition?: string; example?: string }[] {
@@ -105,6 +231,7 @@ export function detectVocabulary(text: string): { term: string; definition?: str
   const lines = text.split('\n')
   for (const line of lines) {
     const trimmed = line.trim()
+    if (PAGE_MARKER.test(trimmed)) continue
     const match = trimmed.match(/^([^\s—–:-]{2,40}(?:\s+[^\s—–:-]{2,40})?)\s*(?:[—–:=:]\s*(.+))?$/)
     if (!match) continue
     const term = match[1]?.trim()
@@ -189,22 +316,114 @@ export function minePatterns(sentences: string[], maxPatterns = 6): MinedPattern
     .map(([pattern, e]) => ({ pattern: `${pattern}…`, examples: e.examples, count: e.count }))
 }
 
-export function detectExercises(text: string): { type: string; prompt: string }[] {
-  const exercises: { type: string; prompt: string }[] = []
+export function detectExercises(text: string): { type: string; prompt: string; page?: string; name?: string }[] {
+  const exercises: { type: string; prompt: string; page?: string; name?: string }[] = []
   const lines = text.split('\n')
+
+  const pageOfLine: (string | undefined)[] = []
+  let currentPage: string | undefined
   for (const line of lines) {
-    const trimmed = line.trim()
+    const marker = line.trim().match(PAGE_MARKER)
+    if (marker) currentPage = `S. ${marker[1]}`
+    pageOfLine.push(currentPage)
+  }
+
+  function pageOfSentence(sentence: string): string | undefined {
+    const idx = lines.findIndex((l) => l.includes(sentence))
+    if (idx < 0) return undefined
+    for (let i = idx; i >= 0; i--) {
+      const marker = lines[i].trim().match(PAGE_MARKER)
+      if (marker) return `S. ${marker[1]}`
+    }
+    return undefined
+  }
+
+  // 1. Explicit exercise markers (Exercise 1, Aufgabe 1, etc.)
+  for (let idx = 0; idx < lines.length; idx++) {
+    const trimmed = lines[idx].trim()
+    if (!trimmed || PAGE_MARKER.test(trimmed)) continue
     if (EXERCISE_PATTERNS.some((p) => p.test(trimmed))) {
       const prompt = trimmed.replace(/^.*?\s*(\d+)?[:.)]\s*/, '').slice(0, 200)
-      exercises.push({ type: classifyExercise(trimmed).type, prompt })
+      exercises.push({
+        type: classifyExercise(trimmed).type,
+        prompt,
+        page: pageOfLine[idx],
+        name: exerciseLabelOf(trimmed),
+      })
     }
   }
-  return exercises.slice(0, 20)
+
+  // 2. Numbered items that look like exercises (1. 2. 3. or a) b) c) plus German "b Lesen", "1 a Persönlichkeitstest")
+  const numberedItems: { line: string; page?: string }[] = []
+  for (let idx = 0; idx < lines.length; idx++) {
+    const trimmed = lines[idx].trim()
+    if (/^(\d+[\.)]?\s+([a-z][\.)]?\s+)?|[a-z][\.)]?\s+|[a-z]\s+[A-ZÄÖÜ])/i.test(trimmed) && trimmed.length > 5 && trimmed.length < 300) {
+      numberedItems.push({ line: trimmed, page: pageOfLine[idx] })
+    }
+  }
+  // Filter: only keep if they look like exercises (contain question marks, fill-blank patterns, imperatives)
+  for (const { line: item, page } of numberedItems) {
+    const lower = item.toLowerCase()
+    if (
+      /\?$/.test(item) || // ends with question mark
+      /___|\[\s*\]|\.\.\.|fill.?in|complete|conjugate|translate|match|choose|select|underline|circle|write|say|speak|listen|read|lesen|ergänzen|markieren|notieren|beantworten|flüssig|warum|wie|persönlichkeitstest|smartphone|friseur|schulzeit/.test(lower) ||
+      /^(make|form|create|write|put|change|turn|rewrite|fill|complete|choose|select|match|find|identify|listen|read|speak|write|translate|conjugate|lesen|ergänzen|markieren|notieren|beantworten|flüssig)\b/i.test(item)
+    ) {
+      const exType = classifyExercise(item).type
+exercises.push({
+        type: exType,
+        prompt: item,
+        page,
+      })
+    }
+  }
+
+  // 3. Questions in the text (questions are often exercises)
+  const sentences = splitSentences(text)
+  for (const sentence of sentences) {
+    if (PAGE_MARKER.test(sentence.trim())) continue
+    if (sentence.endsWith('?') && sentence.length > 10 && sentence.length < 200) {
+      // Avoid chapter titles and section headers
+      if (!/^(chapter|unit|lesson|kapitel|lektion|leçon|lección|capítulo|teil|abschnitt|section|module|part|theme|topic)\b/i.test(sentence)) {
+        const exType = classifyExercise(sentence).type
+        const page = pageOfSentence(sentence)
+exercises.push({
+        type: exType,
+        prompt: sentence,
+        page,
+      })
+      }
+    }
+  }
+
+  // 4. Fill-in-the-blank patterns in sentences
+  for (const sentence of sentences) {
+    if (PAGE_MARKER.test(sentence.trim())) continue
+    if (/___|\[\s*\]|\.\.\./.test(sentence) && sentence.length > 10 && sentence.length < 300) {
+      const page = pageOfSentence(sentence)
+      exercises.push({
+        type: 'fill-blank',
+        prompt: sentence.slice(0, 200),
+        page,
+      })
+    }
+  }
+
+  // Deduplicate by prompt (case-insensitive)
+  const seen = new Set<string>()
+  const unique = exercises.filter((e) => {
+    const key = e.prompt.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  return unique.slice(0, 25)
 }
 
 export function detectConcepts(text: string): { name: string; definition?: string }[] {
   const sentences = splitSentences(text)
-  const words = text.toLowerCase().match(/[\p{L}']{4,}/gu) ?? []
+  const words = text.toLowerCase().replace(/\[PAGE \d+\]/g, ' ').match(/[\p{L}']{4,}/gu) ?? []
   const freq = new Map<string, number>()
   for (const word of words) {
     if (STOPWORDS.has(word) || NOISE_CONCEPTS.has(word)) continue
@@ -271,7 +490,12 @@ export function heuristicDiscover(asset: UploadedAsset): Discovery {
     concepts,
     vocabulary: fullVocab,
     grammar,
-    objectives: sentences.filter((s) => /\b(learn|will be able|understand|practise|practice|know how to|use)\b/i.test(s)).slice(0, 6),
+    objectives: sentences.filter((s) => /\b(learn|will be able|understand|practise|practice|know how to|use)\b/i.test(s)).slice(0, 15),
+    headings: [],
+    text_blocks: [],
+    image_refs: [],
+    audio_refs: [],
+    video_refs: [],
     exercises,
     dialogues,
     sentences,

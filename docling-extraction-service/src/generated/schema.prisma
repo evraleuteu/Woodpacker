@@ -1,0 +1,66 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-py"
+  output   = "../src/generated"
+}
+
+model LessonMaterial {
+  id         String   @id @default(uuid())
+  user_id    String
+  lesson_id  String
+  title      String
+  language   String   @default("de")
+  status     String   @default("processed")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  files LessonMaterialFile[]
+
+  @@unique([user_id, lesson_id])
+  @@index([user_id])
+  @@index([lesson_id])
+}
+
+model LessonMaterialFile {
+  id                 String   @id @default(uuid())
+  lesson_material_id String
+  file_type          String
+  original_filename  String
+  object_key         String?
+  minio_bucket       String?
+  file_size          BigInt?
+  mime_type          String?
+  page_count         Int?
+  word_count         Int?
+  classification     Json?
+  exercises          Json?
+  items              Json?
+  images             Json?
+  audio_refs         Json?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  lesson_material LessonMaterial @relation(fields: [lesson_material_id], references: [id])
+
+  @@unique([lesson_material_id, file_type])
+  @@index([lesson_material_id])
+}
+
+model LessonMaterialLink {
+  id                 String   @id @default(uuid())
+  lesson_material_id String
+  from_exercise_id   String
+  to_exercise_id     String
+  relationship_type  String
+  confidence         Float
+  rationale          String
+  created_at         DateTime @default(now())
+
+  @@index([lesson_material_id])
+  @@index([from_exercise_id])
+  @@index([to_exercise_id])
+}

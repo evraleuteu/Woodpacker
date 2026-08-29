@@ -1,0 +1,2 @@
+src/lib/types/exercise.ts(11,2): error TS1109: Expression expected.
+src/lib/types/exercise.ts(11,3): error TS1161: Unterminated regular expression literal.

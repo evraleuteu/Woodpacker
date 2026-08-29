@@ -1,0 +1,32 @@
+# Dependencies — reinstalled inside the image
+node_modules/
+
+# Build output — rebuilt inside the image
+dist/
+
+# Coverage / test artifacts
+coverage/
+.nyc_output/
+*.lcov
+test_*.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# VCS / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Secrets — never enter build context or image layers
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
+Thumbs.db

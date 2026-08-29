@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "public/**",
+    // Compiled JS output — never lint build artifacts.
+    "**/dist/**",
+    // Separate NestJS service with its own toolchain/config.
+    "backend/**",
+    // One-off codemods / scratch scripts.
+    "*.local.js",
+    "fix*.js",
   ]),
 ]);
 

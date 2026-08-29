@@ -1,0 +1,111 @@
+backend/src/extraction/extraction.controller.ts(14,5): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.controller.ts(18,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(18,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | (() => Promise<{ status: string; extractionService: string; extractionServiceReachable: boolean; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | (() => Promise<{ status: string; extractionService: string; extractionServiceReachable: boolean; }>)'.
+backend/src/extraction/extraction.controller.ts(28,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(28,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { assets?: ExtractionAssetInput[] | undefined; requireAnswer?: boolean | undefined; userId?: string | undefined; }) => Promise<{ id: `${string}-${string}-${string}-${string}-${string}`; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { assets?: ExtractionAssetInput[] | undefined; requireAnswer?: boolean | undefined; userId?: string | undefined; }) => Promise<{ id: `${string}-${string}-${string}-${string}-${string}`; }>)'.
+backend/src/extraction/extraction.controller.ts(30,5): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.controller.ts(55,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(55,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string) => Promise<ExtractionJobStatus>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string) => Promise<ExtractionJobStatus>)'.
+backend/src/extraction/extraction.controller.ts(56,16): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.processor.ts(27,5): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(10,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/search/search.controller.ts(10,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { query?: string | undefined; limit?: number | undefined; }) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { query?: string | undefined; limit?: number | undefined; }) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+backend/src/search/search.controller.ts(11,25): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(20,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/search/search.controller.ts(20,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((q?: string | undefined, limit?: string | undefined) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((q?: string | undefined, limit?: string | undefined) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+backend/src/search/search.controller.ts(21,28): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(21,52): error TS1206: Decorators are not valid here.
+backend/test_simple.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_simple.ts(13,12): error TS2454: Variable 'modeVal' is used before being assigned.
+backend/test_ts2.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_ts3.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_ts4.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+src/components/exercises/ChoiceCard.tsx(48,38): error TS2820: Type '"multiple_select"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"multiple-select"'?
+src/components/exercises/ChoiceCard.tsx(54,18): error TS2820: Type '"multiple_choice"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"multiple-choice"'?
+src/components/exercises/ExerciseSession.tsx(72,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'SentenceBuilderProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(75,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'ChoiceCardProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(77,15): error TS2741: Property 'answerType' is missing in type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' but required in type 'GapFillerProps'.
+src/components/exercises/ExerciseSession.tsx(79,81): error TS2322: Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+  Types of parameters 'answer' and 'answer' are incompatible.
+    Type 'UserAnswer' is not assignable to type 'string'.
+      Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(81,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'SpeakingRecorderProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(84,49): error TS2322: Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+  Types of parameters 'answer' and 'answer' are incompatible.
+    Type 'UserAnswer' is not assignable to type 'string'.
+      Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(86,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'SentenceBlocksProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(88,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'ChoiceCardProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/ExerciseSession.tsx(90,15): error TS2322: Type '{ exercise: PremiumExercise; onAnswer: (answer: string) => void; disabled: boolean; }' is not assignable to type 'ChoiceCardProps'.
+  Types of property 'onAnswer' are incompatible.
+    Type '(answer: string) => void' is not assignable to type '(answer: UserAnswer) => void'.
+      Types of parameters 'answer' and 'answer' are incompatible.
+        Type 'UserAnswer' is not assignable to type 'string'.
+          Type '{ type: "multiple-choice"; selectedOptionId: string; }' is not assignable to type 'string'.
+src/components/exercises/FlashcardDeck.tsx(32,10): error TS2305: Module '"@/lib/exercise-helpers"' has no exported member 'labelForAnswer'.
+src/components/exercises/FlashcardDeck.tsx(218,24): error TS2820: Type '"free_text"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"free-text"'?
+src/components/exercises/FlashcardDeck.tsx(242,43): error TS2820: Type '"free_text"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"free-text"'?
+src/components/exercises/FlashcardDeck.tsx(252,52): error TS2820: Type '"free_text"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"free-text"'?
+src/components/exercises/FlashcardDeck.tsx(295,41): error TS2322: Type '"fill-blank" | "gap-text"' is not assignable to type '"fill_blank" | "gap_text"'.
+  Type '"fill-blank"' is not assignable to type '"fill_blank" | "gap_text"'. Did you mean '"fill_blank"'?
+src/components/exercises/FlashcardDeck.tsx(318,41): error TS2322: Type '{ frontId: string; backId: string; front: string; back: string; }[]' is not assignable to type 'GamePair[]'.
+  Property 'pairId' is missing in type '{ frontId: string; backId: string; front: string; back: string; }' but required in type 'GamePair'.
+src/components/exercises/GameBoard.tsx(93,18): error TS2820: Type '"pattern_drill"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"pattern-drill"'?
+src/components/exercises/GapFiller.tsx(77,16): error TS2322: Type '"fill_blank" | "gap_text"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'.
+  Type '"fill_blank"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"fill-blank"'?
+src/components/exercises/SentenceBlocks.tsx(52,44): error TS2820: Type '"word_order"' is not assignable to type 'ExerciseType'. Did you mean '"word-order"'?
+src/components/exercises/SentenceBlocks.tsx(80,9): error TS2367: This comparison appears to be unintentional because the types 'ExerciseType' and '"word_order"' have no overlap.
+src/components/exercises/SentenceBlocks.tsx(81,18): error TS2820: Type '"word_order"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'. Did you mean '"word-order"'?
+src/components/exercises/SentenceBlocks.tsx(83,18): error TS2322: Type 'ExerciseType' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'.
+  Type '"recall"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'.
+src/components/exercises/SentenceBuilder.tsx(29,3): error TS2820: Type '"sentence_completion"' is not assignable to type 'ExerciseType'. Did you mean '"sentence-completion"'?
+src/components/exercises/SentenceBuilder.tsx(98,18): error TS2322: Type '"fill-blank" | "multiple-choice" | "translation" | "recall" | "pattern-drill" | "roleplay" | "comprehension" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | ... 10 more ... | "true-false"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'.
+  Type '"recall"' is not assignable to type '"fill-blank" | "multiple-choice" | "translation" | "pattern-drill" | "assessment" | "multiple-select" | "gap-text" | "sentence-completion" | "word-order" | "matching" | "drag-drop" | ... 9 more ... | "single-choice"'.
+src/lib/exercise-classifier.ts(52,10): error TS2678: Type '"multiple-choice"' is not comparable to type '"translation" | "recall" | "pattern-drill" | "roleplay" | "comprehension" | "assessment"'.
+src/lib/exercise-classifier.ts(66,10): error TS2678: Type '"fill-blank"' is not comparable to type '"translation" | "recall" | "pattern-drill" | "roleplay" | "comprehension" | "assessment"'.
+src/lib/exercise-resolver.ts(54,7): error TS2367: This comparison appears to be unintentional because the types 'ExerciseType' and '"word_order"' have no overlap.
+src/lib/exercise-resolver.ts(61,8): error TS2367: This comparison appears to be unintentional because the types 'ExerciseType' and '"fill_blank"' have no overlap.
+src/lib/exercise-resolver.ts(61,33): error TS2367: This comparison appears to be unintentional because the types 'ExerciseType' and '"gap_text"' have no overlap.
+src/lib/exercise-validators.ts(36,10): error TS18048: 'segments' is possibly 'undefined'.
+src/lib/exercise-validators.ts(155,56): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/lib/exercise-validators.ts(169,56): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/lib/exercise-validators.ts(237,3): error TS2561: Object literal may only specify known properties, but 'true_false' does not exist in type 'Record<ExerciseType, ExerciseValidator>'. Did you mean to write 'true-false'?
+src/lib/exercise-validators.ts(238,14): error TS7006: Parameter 'ex' implicitly has an 'any' type.
+src/lib/exercise-validators.ts(238,18): error TS7006: Parameter 'a' implicitly has an 'any' type.

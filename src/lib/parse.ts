@@ -1,7 +1,7 @@
 import type { AssetKind, UploadedAsset } from './types'
 
-const MAX_PDF_PAGES = 300
 const MAX_EXTRACTED_CHARS = 250000
+const MAX_TEXT_EXTRACT_BYTES = 150 * 1024 * 1024
 
 function extensionOf(name: string): string {
   const parts = name.toLowerCase().split('.')
@@ -31,29 +31,35 @@ function cleanText(raw: string): string {
     .slice(0, MAX_EXTRACTED_CHARS)
 }
 
-async function parsePdf(file: File): Promise<string> {
-  const { getDocument } = await import('pdfjs-dist')
-  const { GlobalWorkerOptions } = await import('pdfjs-dist')
-  GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-  const data = await file.arrayBuffer()
-  const loadingTask = getDocument({ data })
-  const doc = await loadingTask.promise
-  const pages: string[] = []
-  const count = Math.min(doc.numPages, MAX_PDF_PAGES)
-  for (let i = 1; i <= count; i++) {
-    try {
-      const page = await doc.getPage(i)
-      const content = await page.getTextContent()
-      const text = content.items
-        .map((item) => ('str' in item ? item.str : ''))
-        .join(' ')
-      pages.push(text)
-    } catch {
-      pages.push('')
-    }
+async function parsePdf(file: File): Promise<{ text: string; pageCount: number }> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const res = await fetch('/api/extract/pdf', {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`PDF extraction failed: ${res.status} ${detail.slice(0, 200)}`)
   }
-  await loadingTask.destroy()
-  return cleanText(pages.join('\n\n'))
+  const data = (await res.json()) as { text?: string; pageCount?: number }
+  const text = data.text ?? ''
+  return { text: cleanText(text), pageCount: data.pageCount ?? 0 }
+}
+
+async function parseImage(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const res = await fetch('/api/extract/image', {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Image extraction failed: ${res.status} ${detail.slice(0, 200)}`)
+  }
+  const data = (await res.json()) as { text?: string }
+  return cleanText(data.text ?? '')
 }
 
 async function parseDocx(file: File): Promise<string> {
@@ -172,6 +178,21 @@ export function fakeContent(name: string): string {
   )
 }
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+const MAX_DATA_URL_BYTES = 25 * 1024 * 1024
+
+async function dataUrlIfSmall(file: File): Promise<string | undefined> {
+  return file.size <= MAX_DATA_URL_BYTES ? fileToDataUrl(file) : undefined
+}
+
 export async function parseAsset(file: File): Promise<UploadedAsset> {
   const kind = detectKind(file)
   const base: UploadedAsset = {
@@ -182,8 +203,14 @@ export async function parseAsset(file: File): Promise<UploadedAsset> {
     size: file.size,
   }
   try {
+    if ((kind === 'pdf' || kind === 'docx' || kind === 'epub' || kind === 'pptx') && file.size > MAX_TEXT_EXTRACT_BYTES) {
+      return base
+    }
     if (kind === 'pdf') {
-      base.text = await parsePdf(file)
+      const parsed = await parsePdf(file)
+      base.text = parsed.text
+      base.pageCount = parsed.pageCount
+      base.dataUrl = await dataUrlIfSmall(file)
     } else if (kind === 'docx') {
       base.text = await parseDocx(file)
     } else if (kind === 'epub') {
@@ -195,9 +222,21 @@ export async function parseAsset(file: File): Promise<UploadedAsset> {
     } else if (kind === 'audio') {
       const meta = await audioMetadata(file)
       base.durationSec = meta.durationSec
+      base.dataUrl = await dataUrlIfSmall(file)
     } else if (kind === 'video') {
       const meta = await videoMetadata(file)
       base.durationSec = meta.durationSec
+      base.dataUrl = await dataUrlIfSmall(file)
+    } else if (kind === 'image') {
+      base.dataUrl = await dataUrlIfSmall(file)
+      if (file.size <= MAX_TEXT_EXTRACT_BYTES) {
+        try {
+          base.text = await parseImage(file)
+          base.pageCount = 1
+        } catch {
+          base.text = undefined
+        }
+      }
     }
   } catch {
     base.text = undefined

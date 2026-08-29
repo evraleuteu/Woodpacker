@@ -1,0 +1,24 @@
+
+C:\Users\leute\OneDrive\Bureau\Dev\Woodpacker\Woodpacker\src\app\cycles\[cycle]\page.tsx
+  69:10  warning  'outcomes' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\leute\OneDrive\Bureau\Dev\Woodpacker\Woodpacker\src\components\exercises\FlashcardDeck.tsx
+   95:17  warning  'setSpeed' is assigned a value but never used                          @typescript-eslint/no-unused-vars
+   96:10  warning  'audioReady' is assigned a value but never used                        @typescript-eslint/no-unused-vars
+   97:10  warning  'showTranscript' is assigned a value but never used                    @typescript-eslint/no-unused-vars
+  115:9   warning  'isChoice' is assigned a value but never used                          @typescript-eslint/no-unused-vars
+  150:5   warning  Expected an assignment or function call and instead saw an expression  @typescript-eslint/no-unused-expressions
+  234:9   warning  'revealHint' is assigned a value but never used                        @typescript-eslint/no-unused-vars
+
+C:\Users\leute\OneDrive\Bureau\Dev\Woodpacker\Woodpacker\src\lib\exercise-classifier.ts
+  1:73  warning  'ValidationResult' is defined but never used  @typescript-eslint/no-unused-vars
+  1:91  warning  'UserAnswer' is defined but never used        @typescript-eslint/no-unused-vars
+
+C:\Users\leute\OneDrive\Bureau\Dev\Woodpacker\Woodpacker\src\lib\exercise-validators.ts
+    4:3   warning  'Option' is defined but never used        @typescript-eslint/no-unused-vars
+   19:10  warning  'normalizeSet' is defined but never used  @typescript-eslint/no-unused-vars
+  268:14  warning  '_ex' is defined but never used           @typescript-eslint/no-unused-vars
+  268:19  warning  '_a' is defined but never used            @typescript-eslint/no-unused-vars
+
+Γ£û 13 problems (0 errors, 13 warnings)
+

@@ -1,0 +1,922 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
+import {
+  Upload,
+  BookOpen,
+  Mic,
+  FileText,
+  File as FileIcon,
+  Sparkles,
+  CheckCircle2,
+  Layers,
+  MessageSquare,
+  Network,
+  GitMerge,
+  ListTree,
+  Map as MapIcon,
+  AlertTriangle,
+  Loader2,
+  Search,
+  RotateCcw,
+  Folder as FolderIcon,
+  FolderOpen,
+  Library,
+  RefreshCw,
+  LayoutDashboard,
+  ListChecks,
+} from 'lucide-react'
+import { detectKind, parseAsset, isFake, fakeContent } from '@/lib/parse'
+import { saveCourse, loadCourse, refreshFromServer } from '@/lib/storage'
+import type { FileRole } from '@/lib/heuristics'
+import CourseDashboard from '@/components/CourseDashboard'
+import { DirectoryTree, buildFileTree } from '@/components/upload/DirectoryTree'
+import { UploadSummary } from '@/components/upload/UploadSummary'
+import { RoleReview } from '@/components/upload/RoleReview'
+import type { AssetKind, Course, JobPhase, UploadedAsset } from '@/lib/types'
+import type { AssetClassification } from '@/lib/classify'
+
+const examples = [
+  { label: 'German A1 Textbook', icon: BookOpen, desc: 'PDF textbook', languages: 'German' },
+  { label: 'French Dialogues', icon: Mic, desc: 'Audio course', languages: 'French' },
+  { label: 'Spanish Vocabulary', icon: FileText, desc: 'Word list', languages: 'Spanish' },
+  { label: 'Italian Grammar Notes', icon: FileIcon, desc: 'Study notes', languages: 'Italian' },
+]
+
+const phases: { id: JobPhase; label: string; desc: string; icon: typeof Search }[] = [
+  { id: 'queued', label: 'Queued', desc: 'Waiting to start', icon: Loader2 },
+  { id: 'content-discovery', label: 'Content Discovery', desc: 'Extracting chapters, vocabulary, grammar, skills and objectives from every file', icon: Search },
+  { id: 'structure-reconstruction', label: 'Course Structure', desc: 'Rebuilding modules and lessons in optimal learning order — ignoring file names', icon: Layers },
+  { id: 'knowledge-graph', label: 'Knowledge Graph', desc: 'Linking concepts with prerequisites, parents and relationships', icon: Network },
+  { id: 'duplicate-detection', label: 'Duplicate Detection', desc: 'Merging duplicate lessons, explanations and vocabulary', icon: GitMerge },
+  { id: 'material-generation', label: 'Material Generation', desc: 'Creating vocabulary cards, grammar rules, reading, listening, speaking, writing and exercises', icon: MessageSquare },
+  { id: 'dependency-mapping', label: 'Dependency Mapping', desc: 'Determining what must be learned before what', icon: MapIcon },
+  { id: 'master-tree', label: 'Master Learning Tree', desc: 'Assembling the course with reviews and final assessment', icon: ListTree },
+  { id: 'done', label: 'Complete', desc: 'Your course is ready', icon: CheckCircle2 },
+]
+
+interface ParseEntry {
+  file: File
+  path?: string
+  kind?: AssetKind
+  asset?: UploadedAsset
+  status: 'pending' | 'parsing' | 'ok' | 'empty' | 'failed'
+  message?: string
+  reused?: boolean
+  storedKey?: string
+}
+
+const HIDDEN_NAMES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini', '.gitkeep', '.gitignore'])
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+}
+
+export default function UploadPage() {
+  const [entries, setEntries] = useState<ParseEntry[]>([])
+  const [dragging, setDragging] = useState(false)
+  const [stage, setStage] = useState<'idle' | 'parsing' | 'review' | 'starting' | 'transforming' | 'done' | 'error'>('idle')
+  const [job, setJob] = useState<{ phase: JobPhase; progress: number; message: string; detail: string; mode: 'ai' | 'local' } | null>(null)
+  const [course, setCourse] = useState<Course | null>(() => loadCourse())
+  const [error, setError] = useState<string | null>(null)
+  const [skipped, setSkipped] = useState(0)
+  const [parseComplete, setParseComplete] = useState(false)
+  const [classifying, setClassifying] = useState(false)
+  const [classifications, setClassifications] = useState<Record<string, AssetClassification> | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number; name: string } | null>(null)
+  const reusedIndexRef = useRef<Map<string, string>>(new Map())
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const entriesRef = useRef<ParseEntry[]>([])
+  const rolesRef = useRef<Record<string, FileRole>>({})
+
+  useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void refreshFromServer().then(() => {
+      if (cancelled) return
+      const saved = loadCourse()
+      if (saved && !course) {
+        setCourse(saved)
+        setStage('done')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [course])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch('/api/materials')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.materials) return
+        const index = new Map<string, string>()
+        for (const m of data.materials as { title: string; size: number | null; objectKey: string | null }[]) {
+          if (m.size != null && m.objectKey) index.set(`${m.title}|${m.size}`, m.objectKey)
+        }
+        reusedIndexRef.current = index
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const parseEntry = useCallback(async (entry: ParseEntry): Promise<UploadedAsset | null> => {
+    setEntries((prev) => prev.map((e) => (e.file === entry.file ? { ...e, status: 'parsing' } : e)))
+    try {
+      let file = entry.file
+      if (isFake(file)) {
+        file = new File([fakeContent(file.name)], file.name, { type: 'application/pdf' })
+      }
+      const asset = await parseAsset(file)
+      asset.path = entry.path
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.file === entry.file
+            ? { ...e, asset, status: asset.text ? 'ok' : 'empty', message: asset.text ? undefined : 'No text extractable — stored as media only' }
+            : e
+        )
+      )
+      return asset
+    } catch {
+      setEntries((prev) => prev.map((e) => (e.file === entry.file ? { ...e, status: 'failed' } : e)))
+      return null
+    }
+  }, [])
+
+  const autoParse = useCallback(
+    async (list: ParseEntry[]) => {
+      for (const entry of list) {
+        await parseEntry(entry)
+      }
+      setParseComplete(true)
+    },
+    [parseEntry]
+  )
+
+  const addFiles = useCallback(
+    async (files: File[]) => {
+      const keys = new Set(entriesRef.current.map((e) => `${e.path ?? ''}|${e.file.name}|${e.file.size}`))
+      const fresh: ParseEntry[] = []
+      let skippedCount = 0
+
+      // Process all files - FileList from folder input already contains nested files
+      for (const raw of files) {
+        const path = (raw as File & { webkitRelativePath?: string }).webkitRelativePath ?? ''
+        const base = path ? path.split('/').pop() ?? raw.name : raw.name
+        if (base.startsWith('.') || HIDDEN_NAMES.has(base.toLowerCase())) {
+          skippedCount++
+          continue
+        }
+        const kind = detectKind(raw)
+        if (kind === 'unknown') {
+          skippedCount++
+          continue
+        }
+        const key = `${path}|${raw.name}|${raw.size}`
+        if (keys.has(key)) continue
+        keys.add(key)
+        const storedKey = reusedIndexRef.current.get(`${raw.name}|${raw.size}`)
+        fresh.push({
+          file: raw,
+          path: path || undefined,
+          kind,
+          status: 'pending',
+          reused: Boolean(storedKey),
+          storedKey,
+        })
+      }
+      if (skippedCount) setSkipped((s) => s + skippedCount)
+      if (fresh.length) {
+        setParseComplete(false)
+        setEntries((prev) => [...prev, ...fresh])
+        void autoParse(fresh)
+      }
+    },
+    [autoParse]
+  )
+
+  const scanFolderEntries = useCallback(
+    async (items: DataTransferItemList): Promise<File[]> => {
+      if (!items || !items.length) return []
+
+      const results: File[] = []
+
+      const processEntry = (entry: FileSystemEntry, path = ''): Promise<void> => {
+        return new Promise((resolve) => {
+          if (entry.isFile) {
+            (entry as FileSystemFileEntry).file((file) => {
+              Object.defineProperty(file, 'webkitRelativePath', {
+                value: path ? `${path}/${file.name}` : file.name,
+                writable: false,
+                configurable: true,
+              })
+              results.push(file)
+              resolve()
+            })
+          } else if (entry.isDirectory) {
+            const dirReader = (entry as FileSystemDirectoryEntry).createReader()
+            const readAll = () => {
+              dirReader.readEntries((entries) => {
+                if (!entries.length) {
+                  resolve()
+                  return
+                }
+                Promise.all(
+                  entries.map((e) => processEntry(e, path ? `${path}/${entry.name}` : entry.name))
+                ).then(() => readAll())
+              })
+            }
+            readAll()
+          } else {
+            resolve()
+          }
+        })
+      }
+
+      const promises = Array.from(items)
+          .filter((item) => item.kind === 'file')
+          .map((item) => processEntry(item.webkitGetAsEntry()!, ''))
+
+      await Promise.all(promises)
+      return results
+    },
+    []
+  )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragging(false)
+
+      // Try recursive folder scan via webkitGetAsEntry
+      const files = await scanFolderEntries(e.dataTransfer.items)
+      if (files.length > 0) {
+        addFiles(files)
+      } else {
+        // Fallback to regular file list
+        addFiles(Array.from(e.dataTransfer.files))
+      }
+    },
+    [addFiles, scanFolderEntries]
+  )
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(Array.from(e.target.files))
+    e.target.value = ''
+  }
+
+  const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      // Files from directory input already have webkitRelativePath set
+      addFiles(Array.from(e.target.files))
+    }
+    e.target.value = ''
+  }
+
+  const uploadToMinio = useCallback(async (): Promise<Map<File, string>> => {
+    const keyMap = new Map<File, string>()
+    const realFiles = entriesRef.current.filter((e) => e.asset && !isFake(e.file))
+    if (!realFiles.length) return keyMap
+
+    const CHUNK_BYTES = 64 * 1024 * 1024
+    const SINGLE_MAX = 30 * 1024 * 1024
+    const FILE_CONCURRENCY = 4
+    const CHUNK_CONCURRENCY = 3
+    const total = realFiles.length
+    let done = 0
+
+    const postUpload = async (form: FormData, url: string): Promise<Record<string, unknown>> => {
+      let res: Response
+      try {
+        res = await fetch(url, { method: 'POST', body: form })
+      } catch {
+        throw new Error('Could not reach the upload service. Is the backend running?')
+      }
+      if (!res.ok) {
+        let detail = `Upload to storage failed (HTTP ${res.status})`
+        try {
+          const body = await res.json()
+          if (body?.error) detail = body.error
+        } catch {
+          // keep default message
+        }
+        throw new Error(detail)
+      }
+      return res.json()
+    }
+
+    const uploadWithRetry = async (form: FormData, url: string): Promise<Record<string, unknown>> => {
+      let lastError: unknown
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await postUpload(form, url)
+        } catch (err) {
+          lastError = err
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)))
+        }
+      }
+      throw lastError
+    }
+
+    const uploadOne = async (entry: (typeof realFiles)[number]): Promise<{ file: File; objectKey: string }> => {
+      const { file } = entry
+      if (entry.reused && entry.storedKey) return { file, objectKey: entry.storedKey }
+      let objectKey: string
+      if (file.size <= SINGLE_MAX) {
+        const form = new FormData()
+        form.append('files', file)
+        const data = await uploadWithRetry(form, '/api/upload')
+        const f = (data.files as { objectKey?: string }[] | undefined)?.[0]
+        if (!f?.objectKey) throw new Error('Upload to storage failed: no object key returned')
+        objectKey = f.objectKey
+      } else {
+        const chunkTotal = Math.ceil(file.size / CHUNK_BYTES)
+        const uploadId = crypto.randomUUID()
+        const cancelled = { value: false }
+        let finalKey: string | undefined
+        const uploadChunk = async (c: number): Promise<void> => {
+          if (cancelled.value) return
+          const blob = file.slice(c * CHUNK_BYTES, Math.min((c + 1) * CHUNK_BYTES, file.size))
+          const form = new FormData()
+          form.append('fileName', file.name)
+          form.append('uploadId', uploadId)
+          form.append('chunkIndex', String(c))
+          form.append('chunkTotal', String(chunkTotal))
+          form.append('size', String(file.size))
+          form.append('mime', file.type || 'application/octet-stream')
+          form.append('chunk', blob, file.name)
+          const data = await uploadWithRetry(form, '/api/upload/chunk')
+          if (data.duplicate) {
+            cancelled.value = true
+            finalKey = data.objectKey as string | undefined
+          }
+        }
+        let cursor = 0
+        const chunkWorkers = Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunkTotal) }, async () => {
+          while (!cancelled.value) {
+            const c = cursor++
+            if (c >= chunkTotal) break
+            await uploadChunk(c)
+          }
+        })
+        await Promise.all(chunkWorkers)
+        if (!cancelled.value) {
+          const res = await fetch('/api/upload/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: file.name,
+              uploadId,
+              chunkTotal,
+              mime: file.type || 'application/octet-stream',
+              size: file.size,
+            }),
+          })
+          if (!res.ok) {
+            let detail = `Finalize failed (HTTP ${res.status})`
+            try {
+              const body = await res.json()
+              if (body?.error) detail = body.error
+            } catch {
+              // keep default message
+            }
+            throw new Error(detail)
+          }
+          const data = (await res.json()) as { objectKey?: string }
+          finalKey = data.objectKey as string | undefined
+        }
+        if (!finalKey) throw new Error('Upload to storage failed: chunk finalize returned no object key')
+        objectKey = finalKey
+      }
+      return { file, objectKey }
+    }
+
+    const fileResults: { file: File; objectKey: string }[] = []
+    let failed: unknown = null
+    let cursor = 0
+    const workers = Array.from({ length: Math.min(FILE_CONCURRENCY, realFiles.length) }, async () => {
+      while (!failed) {
+        const i = cursor++
+        if (i >= realFiles.length) break
+        try {
+          const r = await uploadOne(realFiles[i])
+          done++
+          setUploadProgress({ done, total, name: realFiles[i].file.name })
+          fileResults.push(r)
+        } catch (err) {
+          failed = err
+        }
+      }
+    })
+    await Promise.all(workers)
+    if (failed) throw failed
+    for (const r of fileResults) keyMap.set(r.file, r.objectKey)
+    return keyMap
+  }, [])
+
+  const handleTransform = async (roles?: Record<string, FileRole>) => {
+    if (!entries.length || stage === 'transforming' || stage === 'starting') return
+    if (roles) rolesRef.current = roles
+    setError(null)
+    setStage('parsing')
+    const parsed: UploadedAsset[] = []
+    for (const entry of entries) {
+      if (entry.asset) {
+        parsed.push(entry.asset)
+        continue
+      }
+      const asset = await parseEntry(entry)
+      if (asset) parsed.push(asset)
+    }
+    const successful = parsed
+    if (!successful.length) {
+      setStage('error')
+      setError('No readable content was extracted from the selected files.')
+      return
+    }
+    setStage('starting')
+    setUploadProgress(null)
+    try {
+      const objectKeys = await uploadToMinio()
+      const assetsWithStorage = successful.map((a) => {
+        const entry = entries.find((e) => e.asset === a)
+        const objectKey = entry ? objectKeys.get(entry.file) : undefined
+        const payload = {
+          id: a.id,
+          name: a.name,
+          kind: a.kind,
+          mime: a.mime,
+          size: a.size,
+          path: a.path,
+          text: a.text,
+          durationSec: a.durationSec,
+          words: a.words,
+          pageCount: a.pageCount,
+        }
+        return objectKey ? { ...payload, objectKey } : payload
+      })
+      const res = await fetch('/api/transform', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: assetsWithStorage, roles: rolesRef.current }),
+      })
+      if (!res.ok) throw new Error('Failed to start transformation')
+      const { id } = await res.json()
+      setStage('transforming')
+      const poll = async () => {
+        const statusRes = await fetch(`/api/transform?id=${id}`)
+        if (!statusRes.ok) return
+        const data = await statusRes.json()
+        setJob({ phase: data.phase, progress: data.progress, message: data.message, detail: data.detail, mode: data.mode })
+        if (data.status === 'done' && data.result) {
+          if (pollRef.current) clearInterval(pollRef.current)
+          const result = data.result as Course
+          const mediaByAssetId = new Map<string, string>()
+          let mediaBytes = 0
+          for (const a of successful) {
+            if (!a.dataUrl || a.dataUrl.length > 2 * 1024 * 1024) continue
+            mediaBytes += a.dataUrl.length
+            if (mediaBytes > 12 * 1024 * 1024) break
+            mediaByAssetId.set(a.id, a.dataUrl)
+          }
+          const restored: Course = {
+            ...result,
+            sourceFiles: (result.sourceFiles ?? []).map((f) => ({ ...f, dataUrl: f.dataUrl ?? mediaByAssetId.get(f.id) })),
+          }
+          setCourse(restored)
+          saveCourse(restored)
+          setStage('done')
+        } else if (data.status === 'error') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setStage('error')
+          setError(data.error ?? 'Transformation failed')
+        }
+      }
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = setInterval(poll, 1200)
+      void poll()
+    } catch (err) {
+      setStage('error')
+      setError(err instanceof Error ? err.message : 'Transformation failed')
+    }
+  }
+
+  const phaseIndex = job ? phases.findIndex((p) => p.id === job.phase) : -1
+  const completedPhases = phaseIndex >= 0 ? phaseIndex : 0
+  const progressPercent = stage === 'parsing' ? 0 : job ? Math.round(job.progress * 100) : 0
+
+  const beginReview = async () => {
+    if (stage !== 'idle') return
+    setError(null)
+
+    // Files are already stored from a previous upload — skip the AI classification
+    // review step and launch the transformation directly.
+    const allReused = entriesRef.current.length > 0 && entriesRef.current.every((e) => Boolean(e.reused))
+    if (allReused) {
+      void handleTransform()
+      return
+    }
+
+    setStage('review')
+    setClassifying(true)
+    setClassifications(null)
+    try {
+      const parsedAssets = entriesRef.current
+        .map((e) => e.asset)
+        .filter((a): a is UploadedAsset => Boolean(a))
+      if (parsedAssets.length) {
+        const res = await fetch('/api/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assets: parsedAssets.map((a) => ({
+              id: a.id,
+              name: a.name,
+              kind: a.kind,
+              path: a.path,
+              text: a.text?.slice(0, 6000),
+              words: a.words,
+              pageCount: a.pageCount,
+              durationSec: a.durationSec,
+            })),
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const map: Record<string, AssetClassification> = {}
+          for (const c of (data.classifications ?? []) as AssetClassification[]) {
+            if (c && typeof c.id === 'string') map[c.id] = c
+          }
+          setClassifications(Object.keys(map).length ? map : null)
+        }
+      }
+    } catch {
+      // fall back to name heuristics in the review step
+    }
+    setClassifying(false)
+  }
+
+  const classificationRoles = (classificationsMap: Record<string, AssetClassification>): Record<string, FileRole> => {
+    const out: Record<string, FileRole> = {}
+    for (const c of Object.values(classificationsMap)) out[c.id] = c.role
+    return out
+  }
+
+  const tree = buildFileTree(
+    entries.map((e) => ({ file: e.file, path: e.path, kind: e.kind, asset: e.asset, status: e.status, reused: e.reused }))
+  )
+
+  const allParsed = entries.length > 0 && entries.every((e) => e.status === 'ok' || e.status === 'empty')
+  const isReady = allParsed && parseComplete
+
+  return (
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="p-8 max-w-6xl mx-auto">
+      <motion.div variants={itemVariants} className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight">Upload Learning Material</h1>
+        <p className="text-[#A8A29E] text-sm mt-1">
+          Upload an entire course folder or individual files. Woodpecker scans every subfolder, discovers all chapters, exercises, audio, video and solutions, and reconstructs them into one interconnected learning system.
+        </p>
+      </motion.div>
+
+
+
+      <AnimatePresence mode="wait">
+        {stage !== 'done' ? (
+          <motion.div key="upload" variants={containerVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }} className="space-y-6">
+            <motion.div
+              variants={itemVariants}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              className={`rounded-2xl p-16 text-center cursor-pointer transition-all border-2 border-dashed ${
+                dragging
+                  ? 'border-[#10B981] bg-[rgba(16,185,129,0.05)]'
+                  : 'border-[rgba(250,248,245,0.06)] glass hover:border-[rgba(16,185,129,0.3)] hover:bg-[rgba(250,248,245,0.05)]'
+              }`}
+            >
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center mx-auto mb-4 ai-glow">
+                <Upload size={24} className="text-white" />
+              </div>
+              <h3 className="text-lg font-semibold mb-1">
+                {dragging ? 'Drop your folder or files here' : 'Upload your course material'}
+              </h3>
+              <p className="text-sm text-[#A8A29E] mb-2">Drag & drop a folder or files, or click to browse</p>
+              <p className="text-xs text-[#6B7280] mb-4">Supports nested folders — PDF, EPUB, DOCX, PPTX, TXT, MP3, WAV, M4A, MP4, Images</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  document.getElementById('folder-input')?.click()
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-[rgba(250,248,245,0.04)] border border-[rgba(250,248,245,0.1)] hover:border-[rgba(16,185,129,0.4)] hover:bg-[rgba(16,185,129,0.05)] transition-all"
+              >
+                <FolderOpen size={14} className="text-[#10B981]" />
+                Upload a folder — contents detected automatically
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  document.getElementById('file-input')?.click()
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] hover:border-[rgba(16,185,129,0.4)] hover:bg-[rgba(16,185,129,0.05)] transition-all ml-2"
+              >
+                <FileText size={14} />
+                Upload individual files
+              </button>
+              <div className="flex gap-2 mt-4 justify-center">
+                <input id="file-input" type="file" multiple onChange={handleFileSelect} className="hidden" />
+                <input id="folder-input" type="file" {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} multiple onChange={handleFolderSelect} className="hidden" />
+              </div>
+            </motion.div>
+
+            {(stage === 'parsing') && (
+              <motion.div variants={itemVariants} className="space-y-4">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="text-[#A8A29E]">Parsing files…</span>
+                  <span className="text-[#10B981] font-medium">
+                    {entries.filter((e) => e.status === 'ok' || e.status === 'empty').length}/{entries.length}
+                  </span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar-fill"
+                    style={{
+                      width: `${entries.length ? (entries.filter((e) => e.status === 'ok' || e.status === 'empty').length / entries.length) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-[11px] text-[#A8A29E]">
+                  Extracting text, metadata and structure from uploaded materials.
+                </div>
+              </motion.div>
+            )}
+
+            {(stage === 'starting' || (stage === 'transforming' && job)) && (
+              <motion.div variants={itemVariants} className="space-y-4">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="text-[#A8A29E]">{job?.message ?? 'Starting AI transformation…'}</span>
+                  <span className="text-[#10B981] font-medium">{job ? `${progressPercent}%` : '…'}</span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar-fill"
+                    style={{ width: job ? `${progressPercent}%` : '12%', transition: 'width 0.4s ease' }}
+                  />
+                </div>
+                {!job && (
+                  <div className="flex items-center gap-2 text-[11px] text-[#A8A29E]">
+                    <Loader2 size={12} className="animate-spin text-[#10B981]" />
+                    {uploadProgress
+                      ? `Uploading files to storage (${uploadProgress.done}/${uploadProgress.total}) — ${uploadProgress.name}…`
+                      : 'Uploading files to storage and preparing the AI pipeline…'}
+                  </div>
+                )}
+                {job && (
+                  <div className="space-y-2">
+                  {phases.slice(0, phases.length - 1).map((phase, i) => {
+                    const done = i < completedPhases
+                    const active = i === completedPhases
+                    return (
+                      <div
+                        key={phase.id}
+                        className={`flex items-center gap-3 rounded-lg p-2.5 transition-all ${
+                          active ? 'bg-[rgba(16,185,129,0.05)] border border-[rgba(16,185,129,0.15)]' : ''
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                            done
+                              ? 'bg-gradient-to-br from-[#059669] to-[#10B981]'
+                              : active
+                                ? 'bg-[rgba(16,185,129,0.15)] border border-[rgba(16,185,129,0.4)]'
+                                : 'bg-[rgba(250,248,245,0.03)] border border-[rgba(250,248,245,0.08)]'
+                          }`}
+                        >
+                          {done ? (
+                            <CheckCircle2 size={13} className="text-white" />
+                          ) : active ? (
+                            <phase.icon size={13} className="text-[#10B981] animate-pulse-soft" />
+                          ) : (
+                            <phase.icon size={13} className="text-[#6B7280]" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-xs font-medium ${done ? 'text-[#34D399]' : active ? 'text-[#FAF8F5]' : 'text-[#6B7280]'}`}>
+                            {phase.label}
+                          </div>
+                          {active && job.detail && <div className="text-[11px] text-[#A8A29E] truncate">{job.detail}</div>}
+                        </div>
+                        {active && <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse-soft" />}
+                        {done && <span className="text-[10px] text-[#059669]">Done</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+                )}
+              </motion.div>
+            )}
+
+            {error && (
+              <motion.div variants={itemVariants} className="flex items-start gap-2 p-3 rounded-lg bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.2)]">
+                <AlertTriangle size={14} className="text-[#EF4444] mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs font-medium text-[#EF4444]">Transformation failed</div>
+                  <div className="text-xs text-[#A8A29E]">{error}</div>
+                </div>
+                {stage === 'error' && (
+                  <button
+                    onClick={() => void handleTransform()}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-[#059669] to-[#10B981] text-white hover:shadow-[0_0_16px_rgba(16,185,129,0.3)] transition-all"
+                  >
+                    <RotateCcw size={12} />
+                    Retry
+                  </button>
+                )}
+              </motion.div>
+            )}
+
+            {entries.length > 0 && (
+              <motion.div variants={itemVariants}>
+                {(stage === 'idle' || stage === 'parsing') && (
+                  <UploadSummary
+                    entries={entries.map((e) => ({ file: e.file, path: e.path, kind: e.kind, asset: e.asset, status: e.status, reused: e.reused }))}
+                    onStartTransform={beginReview}
+                    disabled={!isReady}
+                    stage={stage === 'parsing' ? 'parsing' : 'idle'}
+                  />
+                )}
+
+                {stage === 'review' &&
+                  (classifying ? (
+                    <motion.div variants={itemVariants} className="glass-card rounded-xl p-5">
+                      <div className="flex items-start gap-2 mb-1">
+                        <Sparkles size={14} className="text-[#10B981] mt-0.5 shrink-0" />
+                        <div>
+                          <h3 className="font-semibold text-sm">Classifying your materials with AI…</h3>
+                          <p className="text-xs text-[#A8A29E] mt-0.5">
+                            The AI is reading each file to determine what it is — lesson book, exercise book, teacher handbook, audio, video and more — so the transformation connects everything correctly.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 mt-4">
+                        {entries
+                          .filter((e) => e.asset)
+                          .map((e) => (
+                            <div key={e.asset!.id} className="flex items-center gap-3 p-2 rounded-lg bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)]">
+                              <Loader2 size={13} className="animate-spin text-[#10B981] shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium truncate">{e.file.name}</div>
+                                <div className="text-[10px] text-[#6B7280] truncate">{e.path || e.kind}</div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <RoleReview
+                      entries={entries.map((e) => ({ file: e.file, path: e.path, kind: e.kind, asset: e.asset }))}
+                      classifications={classifications}
+                      onConfirm={(roles) => void handleTransform(roles)}
+                      onSkip={() => void handleTransform(classifications ? classificationRoles(classifications) : undefined)}
+                      onBack={() => setStage('idle')}
+                    />
+                  ))}
+
+                {(stage === 'starting' || (stage === 'transforming' && job)) && (
+                  <UploadSummary
+                    entries={entries.map((e) => ({ file: e.file, path: e.path, kind: e.kind, asset: e.asset, status: e.status, reused: e.reused }))}
+                    onStartTransform={() => void handleTransform()}
+                    disabled={true}
+                    stage={stage}
+                    job={job ? { phase: job.phase, progress: job.progress, message: job.message, detail: job.detail } : undefined}
+                  />
+                )}
+
+                {(stage === 'idle' || stage === 'parsing' || stage === 'review') && (
+                  <motion.div variants={itemVariants} className="glass-card rounded-xl p-5 mt-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <FolderIcon size={14} className="text-[#F59E0B]" />
+                        Directory Tree
+                      </h3>
+                      <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                        <span>{entries.length} file(s)</span>
+                        {skipped > 0 && <span>· {skipped} skipped</span>}
+                      </div>
+                    </div>
+                    <DirectoryTree roots={tree} />
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+
+            {stage === 'idle' && entries.length === 0 && (
+              <motion.div variants={itemVariants}>
+                <div className="h-px bg-[rgba(250,248,245,0.06)] my-4" />
+                <h3 className="font-semibold text-sm mb-3">Try uploading something like</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {examples.map((ex) => (
+                    <button
+                      key={ex.label}
+                      onClick={() => {
+                        const fakeFile = new File([], ex.label + '.pdf', { type: 'application/pdf' })
+                        setEntries((prev) => [...prev, { file: fakeFile, status: 'pending' }])
+                        void autoParse([{ file: fakeFile, status: 'pending' }])
+                      }}
+                      className="p-4 rounded-xl bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-left transition-all hover:border-[rgba(16,185,129,0.3)] hover:bg-[rgba(250,248,245,0.04)]"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center mb-2">
+                        <ex.icon size={14} className="text-white" />
+                      </div>
+                      <div className="text-sm font-medium">{ex.label}</div>
+                      <div className="text-xs text-[#6B7280]">{ex.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div key="result" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+            {course ? (
+              <CourseDashboard course={course} />
+            ) : null}
+            {course && (
+              <motion.div variants={itemVariants} className="mt-8 glass-card rounded-xl p-5">
+                <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+                  <Sparkles size={14} className="text-[#10B981]" />
+                  Explore your course
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Link
+                    href="/materials"
+                    className="group p-4 rounded-xl bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-center transition-all hover:bg-[rgba(250,248,245,0.04)] hover:border-[rgba(16,185,129,0.2)]"
+                  >
+                    <Library size={18} className="mx-auto mb-2 text-[#6B7280] group-hover:text-[#10B981] transition-colors" />
+                    <div className="text-xs font-medium">Materials</div>
+                  </Link>
+                  <Link
+                    href="/cycles"
+                    className="group p-4 rounded-xl bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-center transition-all hover:bg-[rgba(250,248,245,0.04)] hover:border-[rgba(16,185,129,0.2)]"
+                  >
+                    <RefreshCw size={18} className="mx-auto mb-2 text-[#6B7280] group-hover:text-[#10B981] transition-colors" />
+                    <div className="text-xs font-medium">Cycles</div>
+                  </Link>
+                  <Link
+                    href="/speaking"
+                    className="group p-4 rounded-xl bg-gradient-to-br from-[rgba(16,185,129,0.08)] to-[rgba(5,150,105,0.05)] border border-[rgba(16,185,129,0.15)] text-center transition-all hover:border-[rgba(16,185,129,0.3)] ai-glow-hover"
+                  >
+                    <Mic size={18} className="mx-auto mb-2 text-[#10B981]" />
+                    <div className="text-xs font-medium">Speaking</div>
+                  </Link>
+                  <Link
+                    href="/exercises"
+                    className="group p-4 rounded-xl bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-center transition-all hover:bg-[rgba(250,248,245,0.04)] hover:border-[rgba(16,185,129,0.2)]"
+                  >
+                    <ListChecks size={18} className="mx-auto mb-2 text-[#6B7280] group-hover:text-[#10B981] transition-colors" />
+                    <div className="text-xs font-medium">Exercises</div>
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="group p-4 rounded-xl bg-[rgba(250,248,245,0.02)] border border-[rgba(250,248,245,0.06)] text-center transition-all hover:bg-[rgba(250,248,245,0.04)] hover:border-[rgba(16,185,129,0.2)]"
+                  >
+                    <LayoutDashboard size={18} className="mx-auto mb-2 text-[#6B7280] group-hover:text-[#10B981] transition-colors" />
+                    <div className="text-xs font-medium">Dashboard</div>
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {skipped > 0 && stage !== 'done' && (
+        <motion.div variants={itemVariants} className="mt-2 text-[11px] text-[#6B7280]">
+          Skipped {skipped} unsupported or hidden file(s) — only readable learning material is added.
+        </motion.div>
+      )}
+    </motion.div>
+  )
+}

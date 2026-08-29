@@ -5,34 +5,65 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard,
-  Languages,
-  Mic,
-  Crosshair,
   Upload,
-  BookOpen,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Map,
   Home,
+  BookOpen,
+  BarChart3,
+  Network,
+  Mic2,
+  Library,
+  Sparkles,
+  FileQuestion,
+  Layers,
+  Settings,
+  HelpCircle,
+  Bug,
+  ScanText,
+  Blocks,
+  FileText,
+  Cloud,
 } from 'lucide-react'
+import CourseSwitcher from '@/components/CourseSwitcher'
 
-const navItems = [
-  { href: '/', label: 'Home', icon: Home },
+const primaryNav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/upload', label: 'Upload Center', icon: Upload },
+  { href: '/materials', label: 'Library', icon: Library },
 ]
 
-const pillarItems = [
-  { href: '/language', label: 'Language Mastery', icon: Languages },
-  { href: '/speaking', label: 'Speaking Mastery', icon: Mic },
-  { href: '/accent', label: 'Accent Mastery', icon: Crosshair },
+const learnNav = [
+  { href: '/cycles', label: 'Practice Cycles', icon: RefreshCw },
+  { href: '/exercises', label: 'Exercises', icon: FileQuestion },
+  { href: '/mastery', label: 'Mastery', icon: Layers },
+  { href: '/speaking', label: 'Speaking', icon: Mic2 },
 ]
 
-const toolItems = [
-  { href: '/onboarding', label: 'Start Journey', icon: Map },
-  { href: '/upload', label: 'Upload', icon: Upload },
-  { href: '/materials', label: 'Materials', icon: BookOpen },
-  { href: '/cycles', label: 'Cycles', icon: RefreshCw },
+const insightsNav = [
+  { href: '/progress', label: 'Progress', icon: BarChart3 },
+  { href: '/knowledge-graph', label: 'Knowledge Graph', icon: Network },
+  { href: '/extraction-comparison', label: 'Extraction Comparison', icon: ScanText },
+]
+
+const secondaryNav = [
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/pricing', label: 'Pricing', icon: Sparkles },
+]
+
+const extractionInspectorsNav = [
+  { href: '/developer/pymupdf', label: 'PyMuPDF', icon: FileText, badge: ':8003' },
+  { href: '/developer/surya', label: 'Surya', icon: ScanText, badge: ':8004' },
+  { href: '/developer/pp-structure', label: 'PP-Structure', icon: Layers, badge: ':8005' },
+  { href: '/developer/docling', label: 'Docling', icon: Blocks, badge: ':8002' },
+  { href: '/developer/llm-vision', label: 'LLM+Vision', icon: Sparkles, badge: ':8001' },
+  { href: '/developer/google-docai', label: 'Google Doc AI', icon: Cloud, badge: ':8006' },
+]
+
+const developerNav = [
+  { href: '/developer/pipeline-inspector', label: 'Pipeline Inspector', icon: Bug },
+  { href: '/developer/exercise-inspector', label: 'Exercise Inspector', icon: FileQuestion },
 ]
 
 export default function Sidebar() {
@@ -41,117 +72,188 @@ export default function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/'
-    return pathname.startsWith(href)
+    const base = href.split('?')[0]
+    return pathname === base || pathname.startsWith(base + '/')
+  }
+
+  const NavLink = ({ href, label, icon: Icon }: { href: string; label: string; icon: typeof Home }) => {
+    const active = isActive(href)
+    return (
+      <Link
+        href={href}
+        className={`mx-2 flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium transition-all ${
+          active
+            ? 'border border-[#BBF7D0] bg-[#F0FDF4] text-[#1F7A4C]'
+            : 'border border-transparent text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+        }`}
+        title={collapsed ? label : undefined}
+      >
+        <Icon size={17} className={active ? 'text-[#1F7A4C]' : 'text-[#9CA3AF]'} />
+        {!collapsed && <span>{label}</span>}
+      </Link>
+    )
   }
 
   return (
     <aside
       className={`${
-        collapsed ? 'w-16' : 'w-56'
-      } h-screen glass border-r border-[rgba(250,248,245,0.06)] transition-all duration-200 flex flex-col shrink-0 relative z-10`}
+        collapsed ? 'w-[72px]' : 'w-[256px]'
+      } h-screen bg-white border-r border-[#E5E7EB] transition-all duration-200 flex flex-col shrink-0 relative z-20`}
+      aria-label="Main navigation"
     >
-      <div className="p-4 border-b border-[rgba(250,248,245,0.06)] flex items-center justify-between h-14">
-        {!collapsed && (
-          <Link href="/" className="text-base font-bold tracking-tight flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center">
-              <span className="text-[10px] text-white font-bold">W</span>
+      {/* Header */}
+      <div className="h-[64px] px-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
+        {!collapsed ? (
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#1F7A4C] flex items-center justify-center shrink-0">
+              <BookOpen size={15} className="text-white" />
             </div>
-            <span className="text-gradient">Woodpecker</span>
+            <span className="text-[15px] font-bold tracking-tight text-[#111827]" style={{ fontFamily: 'var(--font-manrope)' }}>
+              Woodpacker
+            </span>
           </Link>
-        )}
-        {collapsed && (
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center mx-auto">
-            <span className="text-[10px] text-white font-bold">W</span>
+        ) : (
+          <div className="w-8 h-8 rounded-xl bg-[#1F7A4C] flex items-center justify-center mx-auto">
+            <BookOpen size={16} className="text-white" />
           </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="text-[#6B7280] hover:text-[#FAF8F5] transition-colors p-1 rounded-md hover:bg-[rgba(250,248,245,0.03)]"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="w-7 h-7 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB] flex items-center justify-center transition-colors shrink-0"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
       </div>
 
-      <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-lg transition-all ${
-              isActive(item.href)
-                ? 'bg-gradient-to-r from-[rgba(16,185,129,0.12)] to-[rgba(5,150,105,0.08)] text-[#FAF8F5] border border-[rgba(16,185,129,0.25)]'
-                : 'text-[#6B7280] hover:text-[#FAF8F5] hover:bg-[rgba(250,248,245,0.03)]'
-            }`}
-            title={collapsed ? item.label : undefined}
-          >
-            <item.icon size={16} className="shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
-          </Link>
-        ))}
+      {/* Course switcher */}
+      {!collapsed && (
+        <div className="px-3 py-3 border-b border-[#F3F4F6]">
+          <CourseSwitcher />
+        </div>
+      )}
 
-        {!collapsed && (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-1.5">
-            <div className="w-1 h-1 rounded-full bg-gradient-to-r from-[#059669] to-[#10B981]" />
-            <div className="text-[10px] uppercase tracking-[0.15em] text-[rgba(250,248,245,0.3)] font-semibold">
-              Pillars
+      <nav className="flex-1 py-4 space-y-5 overflow-y-auto">
+        {/* Primary */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-4 pb-2">
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Workspace</span>
             </div>
+          )}
+          {primaryNav.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </div>
+
+        {/* Learn */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-4 pb-2">
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Learn</span>
+            </div>
+          )}
+          {learnNav.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </div>
+
+        {/* Insights */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-4 pb-2">
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Insights</span>
+            </div>
+          )}
+          {insightsNav.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </div>
+
+        {/* Extraction Inspectors — 6 independent benchmarks (stateless, per-port) */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-4 pb-2 flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-[#10B981]" />
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Extraction Inspectors</span>
+            </div>
+          )}
+          {extractionInspectorsNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`mx-2 flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium transition-all ${
+                isActive(item.href)
+                  ? 'border border-[#BBF7D0] bg-[#F0FDF4] text-[#1F7A4C]'
+                  : 'border border-transparent text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+              }`}
+              title={collapsed ? `${item.label} ${item.badge}` : undefined}
+            >
+              <item.icon size={17} className={isActive(item.href) ? 'text-[#1F7A4C]' : 'text-[#9CA3AF]'} />
+              {!collapsed && (
+                <span className="flex-1 flex items-center justify-between">
+                  <span>{item.label}</span>
+                  <span className="text-[10px] font-mono text-[#9CA3AF] bg-[#F3F4F6] border border-[#E5E7EB] rounded px-1 py-0.5">{item.badge}</span>
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
+
+        {/* Developer – tooling (pipeline + stored artifacts) */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-4 pb-2 flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-[#6B7280]" />
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Developer Tools</span>
+            </div>
+          )}
+          {developerNav.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </div>
+
+        {/* Secondary - collapsed shows only if not collapsed for cleanliness */}
+        {!collapsed && (
+          <div className="space-y-1 pt-2 border-t border-[#F3F4F6] mx-3">
+            <div className="px-1 pb-2 pt-2">
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[#9CA3AF] uppercase">Discover</span>
+            </div>
+            {secondaryNav.map((item) => (
+              <NavLink key={item.href} {...item} />
+            ))}
           </div>
         )}
-        {pillarItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-lg transition-all ${
-              isActive(item.href)
-                ? 'bg-gradient-to-r from-[rgba(16,185,129,0.12)] to-[rgba(5,150,105,0.08)] text-[#FAF8F5] border border-[rgba(16,185,129,0.25)]'
-                : 'text-[#6B7280] hover:text-[#FAF8F5] hover:bg-[rgba(250,248,245,0.03)]'
-            }`}
-            title={collapsed ? item.label : undefined}
-          >
-            <item.icon size={16} className="shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
-          </Link>
-        ))}
-
-        {!collapsed && (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-1.5">
-            <div className="w-1 h-1 rounded-full bg-gradient-to-r from-[#F59E0B] to-[#FBBF24]" />
-            <div className="text-[10px] uppercase tracking-[0.15em] text-[rgba(250,248,245,0.3)] font-semibold">
-              Tools
-            </div>
-          </div>
-        )}
-        {toolItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-lg transition-all ${
-              isActive(item.href)
-                ? 'bg-gradient-to-r from-[rgba(16,185,129,0.12)] to-[rgba(5,150,105,0.08)] text-[#FAF8F5] border border-[rgba(16,185,129,0.25)]'
-                : 'text-[#6B7280] hover:text-[#FAF8F5] hover:bg-[rgba(250,248,245,0.03)]'
-            }`}
-            title={collapsed ? item.label : undefined}
-          >
-            <item.icon size={16} className="shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
-          </Link>
-        ))}
       </nav>
 
-      <div className="p-4 border-t border-[rgba(250,248,245,0.06)]">
+      {/* Bottom */}
+      <div className="p-3 border-t border-[#E5E7EB] space-y-2">
         {!collapsed ? (
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center text-[10px] font-bold shrink-0">
-              U
+          <>
+            <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[#F9FAFB] transition-colors">
+              <div className="w-8 h-8 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-xs font-bold text-[#1F7A4C] shrink-0">
+                L
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-sm font-semibold text-[#111827] truncate">Learner</div>
+                <div className="text-xs text-[#6B7280]">Free plan</div>
+              </div>
+              <Link href="/settings" className="w-7 h-7 rounded-lg bg-white border border-[#E5E7EB] flex items-center justify-center text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB]">
+                <Settings size={14} />
+              </Link>
             </div>
-            <div className="text-xs flex-1 min-w-0">
-              <div className="font-medium text-[#FAF8F5] truncate">Learner</div>
-              <div className="text-[#6B7280]">Level: Beginner</div>
-            </div>
-          </div>
+            <Link href="/help" className="hidden">
+              <HelpCircle size={14} /> Help
+            </Link>
+          </>
         ) : (
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center text-[10px] font-bold mx-auto">
-            U
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-xs font-bold text-[#1F7A4C]">
+              L
+            </div>
+            <Link href="/settings" className="w-7 h-7 rounded-lg bg-white border border-[#E5E7EB] flex items-center justify-center text-[#6B7280]">
+              <Settings size={14} />
+            </Link>
           </div>
         )}
       </div>

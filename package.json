@@ -6,26 +6,42 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx src/worker.ts",
+    "smoke:transform": "tsx scripts/smoke-transform.ts",
     "lint": "eslint"
   },
   "dependencies": {
+    "@fastify/busboy": "^3.2.1",
+    "@google-cloud/documentai": "^10.0.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "bullmq": "^6.1.1",
+    "dotenv": "^17.4.2",
     "framer-motion": "^12.42.2",
+    "ioredis": "^6.0.0",
     "jszip": "^3.10.1",
     "lucide-react": "^1.26.0",
     "mammoth": "^1.12.1",
+    "minio": "^8.0.7",
     "next": "16.2.11",
     "pdfjs-dist": "^6.2.108",
+    "pg": "^8.23.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "reactflow": "^11.11.4",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "prisma": "^7.9.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }

@@ -10,17 +10,24 @@ Accepts:
 - Images
 - Notes
 
-### OCR Service
-Extracts text.
+### Document Understanding Pipeline (Book Analyzer v2)
+Deterministic layout-first pipeline — **layout analysis detects document structure; LLMs only enrich already-detected blocks** (never page-level vision):
+
+1. PDF Processing (PyMuPDF: page images, embedded images, text layer, coordinates)
+2. Layout Detection (Google Document AI → PaddleOCR PP-Structure V3 → Surya; interchangeable providers; every block carries mandatory `bbox` + confidence)
+3. Block Extraction (crop every block independently)
+4. OCR Per Block (Document AI → Google Vision → PaddleOCR → Surya; never whole-page OCR)
+5. Block Classification (deterministic rules first; LLM only on low confidence)
+6. Image Understanding (vision per image block only)
+7. Relationship Builder (instruction/question/image/audio/solution ↔ exercise)
+8. Knowledge Graph (`HAS_EXERCISE`, `HAS_IMAGE`, `HAS_AUDIO`, `HAS_SOLUTION`, …)
+9. Exercise Detection + Type Classification (15 types, confidence-scored)
+10. Storage (every detected object persisted as structured JSON)
+
+Implemented as a LangGraph pipeline (independently testable nodes, execution-time + confidence logging, retries) with a Pipeline Inspector debug page. Full spec: [`Context Files/BOOK_ANALYZER.md`](Context%20Files/BOOK_ANALYZER.md). The legacy page-level vision + chunked-LLM discovery pipeline in `src/lib/pipeline.ts` is deprecated by this spec.
 
 ### Speech-to-Text Service
 Processes audio.
-
-### Book Analyzer
-Extracts:
-- Structure
-- Exercises
-- Knowledge
 
 ### Accent Analyzer
 Analyzes:
@@ -121,6 +128,44 @@ Mastery Engine
     ↓
 Woodpecker Scheduler
 ```
+
+## Implemented Pipeline (Current Code)
+
+> **Superseded for PDF processing.** The layout-first Document Understanding
+> Pipeline (above, `BOOK_ANALYZER.md`) replaces the page-level vision + LLM
+> discovery flow below. Keep the code running until the LangGraph pipeline
+> lands; do not extend it.
+
+The pipeline implemented in `src/lib/pipeline.ts` (client-side, `chatJson`
+LLM + heuristic fallback):
+
+```
+sanitizeAssets (text extraction, 24 assets max, 250k chars each)
+    ↓
+DISCOVERY_SYSTEM (llmDiscover — per 24k-char chunk, concurrency 4)
+    chapters / topics / concepts / vocabulary / grammar / objectives /
+    exercises / dialogues / sentences   → validateExtractedExercise (requireAnswer:false)
+    ↓
+buildPackagePlan (spine/workbook/handbook/reference/media grouping)
+    ↓
+RECONSTRUCT_SYSTEM (llmReconstruct — blueprint: modules, lessons, concepts,
+    duplicates, path)  → heuristic reconstructBlueprint fallback
+    ↓
+MATERIALS_SYSTEM (llmMaterials — per lesson: vocabulary, grammar, reading,
+    listening, speaking, writing, exercises)
+    → validateExtractedExercise (requireAnswer:true)
+    ↓
+assembleCourse → Course (modules/lessons/exercises/materials/concepts/path/stats)
+    ↓
+Exercises play page → FlashcardDeck (see FLASHCARD_CHARACTERISTICS.md)
+```
+
+If the LLM discovery or reconstruction fails, the pipeline falls back to
+`heuristics.ts` (local mode) and `reconstructBlueprint`.
+
+Exercise extraction is validated at all three extraction sites via
+`src/lib/exercise-validation.ts` — see
+`Context Files/Exercise_Extraction_Skill/` for the fix workflow.
 
 ## Recommended Stack
 

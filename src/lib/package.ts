@@ -79,11 +79,16 @@ function folderName(assets: UploadedAsset[]): string | undefined {
   return withPath?.path?.split('/')[0]
 }
 
-export function buildPackagePlan(assets: UploadedAsset[], discoveries: Discovery[]): PackagePlan {
+/**
+ * Builds the package plan (role classification + chapter grouping).
+ * `rolesOverride` (assetId → role) takes precedence over name-based detection —
+ * these are the roles the user confirmed in the upload review step.
+ */
+export function buildPackagePlan(assets: UploadedAsset[], discoveries: Discovery[], rolesOverride?: Record<string, FileRole>): PackagePlan {
   const roles = new Map<string, FileRole>()
   const discoveryByAsset = new Map<string, Discovery>()
   for (const d of discoveries) discoveryByAsset.set(d.assetId, d)
-  for (const a of assets) roles.set(a.id, classifyFileRole(a))
+  for (const a of assets) roles.set(a.id, rolesOverride?.[a.id] ?? classifyFileRole(a))
 
   const textAssets = assets.filter((a) => a.text)
   const textbooks = textAssets.filter((a) => roles.get(a.id) === 'textbook')
@@ -174,8 +179,8 @@ function difficultyOf(grammar: { name: string }[]): Difficulty {
   return 'beginner'
 }
 
-export function reconstructBlueprint(assets: UploadedAsset[], discoveries: Discovery[]): Blueprint {
-  const plan = buildPackagePlan(assets, discoveries)
+export function reconstructBlueprint(assets: UploadedAsset[], discoveries: Discovery[], rolesOverride?: Record<string, FileRole>): Blueprint {
+  const plan = buildPackagePlan(assets, discoveries, rolesOverride)
   const modules: Module[] = []
   const concepts: ConceptNode[] = []
   const conceptsByName = new Map<string, ConceptNode>()

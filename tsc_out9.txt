@@ -1,0 +1,36 @@
+backend/src/extraction/extraction.controller.ts(14,5): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.controller.ts(18,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(18,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | (() => Promise<{ status: string; extractionService: string; extractionServiceReachable: boolean; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | (() => Promise<{ status: string; extractionService: string; extractionServiceReachable: boolean; }>)'.
+backend/src/extraction/extraction.controller.ts(28,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(28,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { assets?: ExtractionAssetInput[] | undefined; requireAnswer?: boolean | undefined; userId?: string | undefined; }) => Promise<{ id: `${string}-${string}-${string}-${string}-${string}`; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { assets?: ExtractionAssetInput[] | undefined; requireAnswer?: boolean | undefined; userId?: string | undefined; }) => Promise<{ id: `${string}-${string}-${string}-${string}-${string}`; }>)'.
+backend/src/extraction/extraction.controller.ts(30,5): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.controller.ts(55,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/extraction/extraction.controller.ts(55,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string) => Promise<ExtractionJobStatus>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string) => Promise<ExtractionJobStatus>)'.
+backend/src/extraction/extraction.controller.ts(56,16): error TS1206: Decorators are not valid here.
+backend/src/extraction/extraction.processor.ts(27,5): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(10,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/search/search.controller.ts(10,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { query?: string | undefined; limit?: number | undefined; }) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((body: { query?: string | undefined; limit?: number | undefined; }) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+backend/src/search/search.controller.ts(11,25): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(20,3): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+backend/src/search/search.controller.ts(20,4): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((q?: string | undefined, limit?: string | undefined) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((q?: string | undefined, limit?: string | undefined) => Promise<{ query: string; count: number; hits: ExerciseSearchHit[]; }>)'.
+backend/src/search/search.controller.ts(21,28): error TS1206: Decorators are not valid here.
+backend/src/search/search.controller.ts(21,52): error TS1206: Decorators are not valid here.
+backend/test_simple.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_simple.ts(13,12): error TS2454: Variable 'modeVal' is used before being assigned.
+backend/test_ts2.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_ts3.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+backend/test_ts4.ts(2,7): error TS2300: Duplicate identifier 'Test'.
+src/app/cycles/[cycle]/page.tsx(214,17): error TS2304: Cannot find name 'setOutcomes'.
+src/components/exercises/FlashcardDeck.tsx(163,14): error TS2304: Cannot find name 'speed'.
+src/components/exercises/FlashcardDeck.tsx(176,5): error TS2304: Cannot find name 'setAudioReady'.
+src/components/exercises/FlashcardDeck.tsx(177,5): error TS2304: Cannot find name 'setShowTranscript'.

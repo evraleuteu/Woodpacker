@@ -1,0 +1,324 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  name               String?
+  subscription_plan  SubscriptionPlan   @default(free)
+  created_at         DateTime           @default(now())
+  learning_materials LearningMaterial[]
+  courses            Course[]
+  pattern_masteries  PatternMastery[]
+  progress           Progress[]
+  speaking_attempts  SpeakingAttempt[]
+  speaking_mastery   SpeakingMastery[]
+  speaking_sessions  SpeakingSession[]
+}
+
+model Course {
+  id         String   @id @default(uuid())
+  user_id    String
+  title      String
+  data       Json
+  active     Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  user       User     @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([active])
+}
+
+model LearningMaterial {
+  id                String            @id @default(uuid())
+  user_id           String
+  title             String
+  type              String
+  language          String
+  status            String            @default("pending")
+  size              BigInt?
+  object_key        String?
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+  chapters          Chapter[]
+  knowledge_units   KnowledgeUnit[]
+  user              User              @relation(fields: [user_id], references: [id])
+  patterns          Pattern[]
+  woodpecker_cycles WoodpeckerCycle[]
+
+  @@index([user_id])
+  @@index([status])
+  @@index([user_id, title, size])
+}
+
+model Chapter {
+  id              String           @id @default(uuid())
+  material_id     String
+  title           String
+  position        Int
+  content         String?
+  material        LearningMaterial @relation(fields: [material_id], references: [id])
+  knowledge_units KnowledgeUnit[]
+
+  @@index([material_id])
+}
+
+model KnowledgeUnit {
+  id          String           @id @default(uuid())
+  material_id String
+  chapter_id  String
+  title       String
+  type        String
+  content     String
+  difficulty  Difficulty       @default(beginner)
+  created_at  DateTime         @default(now())
+  exercises   Exercise[]
+  chapter     Chapter          @relation(fields: [chapter_id], references: [id])
+  material    LearningMaterial @relation(fields: [material_id], references: [id])
+
+  @@index([material_id])
+  @@index([type])
+}
+
+model Exercise {
+  id                String        @id @default(uuid())
+  knowledge_unit_id String
+  type              ExerciseType
+  difficulty        Difficulty    @default(beginner)
+  prompt            String
+  answer            String?
+  options           Json?
+  source_assets     String[]
+  created_at        DateTime      @default(now())
+  knowledge_unit    KnowledgeUnit @relation(fields: [knowledge_unit_id], references: [id])
+
+  @@index([knowledge_unit_id])
+  @@index([type])
+}
+
+model Pattern {
+  id          String           @id @default(uuid())
+  material_id String
+  pattern     String
+  frequency   Int              @default(1)
+  created_at  DateTime         @default(now())
+  material    LearningMaterial @relation(fields: [material_id], references: [id])
+
+  @@index([material_id])
+  @@index([pattern])
+}
+
+model WoodpeckerCycle {
+  id            String           @id @default(uuid())
+  material_id   String
+  cycle_number  Int
+  duration_days Int
+  status        String           @default("pending")
+  created_at    DateTime         @default(now())
+  material      LearningMaterial @relation(fields: [material_id], references: [id])
+
+  @@index([material_id])
+  @@index([cycle_number])
+}
+
+model Progress {
+  id            String   @id @default(uuid())
+  user_id       String
+  exercise_id   String
+  score         Float
+  attempts      Int      @default(1)
+  last_reviewed DateTime @default(now())
+  user          User     @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([exercise_id])
+}
+
+model SpeakingSession {
+  id           String            @id @default(uuid())
+  user_id      String
+  material_id  String
+  session_type SessionType
+  score        Float?
+  duration     Int?
+  created_at   DateTime          @default(now())
+  attempts     SpeakingAttempt[]
+  user         User              @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([session_type])
+  @@index([material_id])
+}
+
+model SpeakingAttempt {
+  id         String          @id @default(uuid())
+  session_id String
+  user_id    String
+  prompt     String
+  transcript String?
+  feedback   Json?
+  score      Float?
+  created_at DateTime        @default(now())
+  session    SpeakingSession @relation(fields: [session_id], references: [id])
+  user       User            @relation(fields: [user_id], references: [id])
+
+  @@index([session_id])
+}
+
+model SpeakingPattern {
+  id                 String    @id @default(uuid())
+  pattern            String
+  mastery_score      Float     @default(0)
+  automaticity_score Float     @default(0)
+  last_practiced     DateTime?
+  next_review        DateTime
+  created_at         DateTime  @default(now())
+
+  @@index([pattern])
+  @@index([next_review])
+}
+
+model SpeakingMastery {
+  id               String    @id @default(uuid())
+  user_id          String
+  exercise_id      String
+  mastery_level    Int       @default(0)
+  cycles_completed Int       @default(0)
+  last_mastered    DateTime?
+  needs_review     Boolean   @default(false)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  user             User      @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([needs_review])
+}
+
+model LessonMaterial {
+  id           String   @id @default(uuid())
+  user_id      String
+  lesson_id    String   // e.g., "lesson-1", "lesson-2"
+  title        String   // e.g., "Lesson 1: Veränderungen"
+  language     String   @default("de")
+  status       String   @default("processed")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  files        LessonMaterialFile[]
+
+  @@index([user_id])
+  @@index([lesson_id])
+  @@unique([user_id, lesson_id])
+}
+
+model LessonMaterialFile {
+  id                String        @id @default(uuid())
+  lesson_material_id String
+  file_type         String        // "kursbuch" | "ubungsbuch" | "audio" | "loesungen"
+  original_filename String
+  object_key        String?
+  minio_bucket      String?
+  file_size         BigInt?
+  mime_type         String?
+  page_count        Int?
+  word_count        Int?
+  classification    Json?         // MaterialClassification from extraction
+  exercises         Json?         // ExerciseRef[] from extraction
+  items             Json?         // ExerciseItem[] from extraction
+  images            Json?         // ExtractedImageModel[] from extraction
+  audio_refs        Json?         // Audio references from extraction
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  lesson_material   LessonMaterial @relation(fields: [lesson_material_id], references: [id], onDelete: Cascade)
+
+  @@index([lesson_material_id])
+  @@index([file_type])
+  @@unique([lesson_material_id, file_type])
+}
+
+model LessonMaterialLink {
+  id                  String   @id @default(uuid())
+  lesson_material_id  String
+  from_exercise_id    String   // exercise_id from source file
+  to_exercise_id      String   // exercise_id from target file
+  relationship_type   String   // "chapter_match", "exercise_number_match", "audio_link", "solution_link"
+  confidence          Float
+  rationale           String
+  created_at          DateTime @default(now())
+
+  @@index([lesson_material_id])
+  @@index([from_exercise_id])
+  @@index([to_exercise_id])
+}
+
+
+model ExerciseEmbedding {
+  id          String                  @id @default(uuid())
+  exercise_id String                  @unique
+  model       String
+  embedding   Unsupported("double precision[]")?
+  created_at  DateTime                @default(now())
+
+  @@index([model])
+}
+
+model PatternMastery {
+  id                 String   @id @default(uuid())
+  pattern            String
+  mastery_level      Int      @default(0)
+  total_attempts     Int      @default(0)
+  automaticity_score Float    @default(0)
+  next_review        DateTime
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+  user_id            String
+  user               User     @relation(fields: [user_id], references: [id])
+
+  @@index([pattern])
+  @@index([next_review])
+}
+
+enum SubscriptionPlan {
+  free
+  plus
+  premium
+}
+
+enum ExerciseType {
+  fill_blank
+  multiple_choice
+  translation
+  recall
+  pattern_drill
+  roleplay
+  comprehension
+  assessment
+}
+
+enum SessionType {
+  pronunciation
+  fluency
+  comprehension
+  roleplay
+}
+
+enum Difficulty {
+  beginner
+  intermediate
+  advanced
+}
+
+

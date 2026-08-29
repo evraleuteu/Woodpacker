@@ -1,0 +1,178 @@
+// Woodpacker backend — mirrors the app schema (prisma/schema.prisma).
+// Migrations are owned by the Woodpecker app; this schema keeps the
+// generated client in sync for the extraction orchestration layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  name               String?
+  subscription_plan  SubscriptionPlan   @default(free)
+  created_at         DateTime           @default(now())
+  learning_materials LearningMaterial[]
+}
+
+model LearningMaterial {
+  id                String            @id @default(uuid())
+  user_id           String
+  title             String
+  type              String
+  language          String
+  status            String            @default("pending")
+  size              BigInt?
+  object_key        String?
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+  chapters          Chapter[]
+  knowledge_units   KnowledgeUnit[]
+  user              User              @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model Chapter {
+  id              String           @id @default(uuid())
+  material_id     String
+  title           String
+  position        Int
+  content         String?
+  material        LearningMaterial @relation(fields: [material_id], references: [id])
+  knowledge_units KnowledgeUnit[]
+
+  @@index([material_id])
+}
+
+model KnowledgeUnit {
+  id          String           @id @default(uuid())
+  material_id String
+  chapter_id  String
+  title       String
+  type        String
+  content     String
+  difficulty  Difficulty       @default(beginner)
+  created_at  DateTime         @default(now())
+  exercises   Exercise[]
+  chapter     Chapter          @relation(fields: [chapter_id], references: [id])
+  material    LearningMaterial @relation(fields: [material_id], references: [id])
+
+  @@index([material_id])
+  @@index([type])
+}
+
+model Exercise {
+  id                String        @id @default(uuid())
+  knowledge_unit_id String
+  type              ExerciseType
+  difficulty        Difficulty    @default(beginner)
+  prompt            String
+  answer            String?
+  options           Json?
+  source_assets     String[]
+  created_at        DateTime      @default(now())
+  knowledge_unit    KnowledgeUnit @relation(fields: [knowledge_unit_id], references: [id])
+
+  @@index([knowledge_unit_id])
+  @@index([type])
+}
+
+enum SubscriptionPlan {
+  free
+  plus
+  premium
+}
+
+enum ExerciseType {
+  fill_blank
+  multiple_choice
+  translation
+  recall
+  pattern_drill
+  roleplay
+  comprehension
+  assessment
+}
+
+enum Difficulty {
+  beginner
+  intermediate
+  advanced
+}
+
+model LessonMaterial {
+  id           String   @id @default(uuid())
+  user_id      String
+  lesson_id    String
+  title        String
+  language     String   @default("de")
+  status       String   @default("processed")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  files        LessonMaterialFile[]
+
+  @@index([user_id])
+  @@index([lesson_id])
+  @@unique([user_id, lesson_id])
+}
+
+model LessonMaterialFile {
+  id                String        @id @default(uuid())
+  lesson_material_id String
+  file_type         String
+  original_filename String
+  object_key        String?
+  minio_bucket      String?
+  file_size         BigInt?
+  mime_type         String?
+  page_count        Int?
+  word_count        Int?
+  classification    Json?
+  exercises         Json?
+  items             Json?
+  images            Json?
+  audio_refs        Json?
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  lesson_material   LessonMaterial @relation(fields: [lesson_material_id], references: [id], onDelete: Cascade)
+
+  @@index([lesson_material_id])
+  @@index([file_type])
+  @@unique([lesson_material_id, file_type])
+}
+
+
+model ExerciseEmbedding {
+  id          String                  @id @default(uuid())
+  exercise_id String                  @unique
+  model       String
+  embedding   Unsupported("double precision[]")?
+  created_at  DateTime                @default(now())
+
+  @@index([model])
+}
+
+model LessonMaterialLink {
+  id                  String   @id @default(uuid())
+  lesson_material_id  String
+  from_exercise_id    String
+  to_exercise_id      String
+  relationship_type   String
+  confidence          Float
+  rationale           String
+  created_at          DateTime @default(now())
+
+  @@index([lesson_material_id])
+  @@index([from_exercise_id])
+  @@index([to_exercise_id])
+}
+

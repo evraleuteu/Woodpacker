@@ -1,0 +1,6 @@
+
+C:\Users\leute\OneDrive\Bureau\Dev\Woodpacker\Woodpacker\src\app\cycles\[cycle]\page.tsx
+  70:4  error  Parsing error: Expression expected
+
+Γ£û 1 problem (1 error, 0 warnings)
+

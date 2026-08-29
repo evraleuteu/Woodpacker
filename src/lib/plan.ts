@@ -1,4 +1,4 @@
-import type { Course, Lesson } from './types'
+import type { Course, Exercise, Lesson } from './types'
 import { classifyExercise } from './heuristics'
 
 export type PracticeDimension = 'vocabulary' | 'grammar' | 'listening' | 'reading' | 'hearing' | 'speaking'
@@ -30,6 +30,7 @@ export interface PracticeItem {
   dimension: PracticeDimension
   prompt: string
   kind: 'textbook' | 'generated'
+  exercise?: Exercise
 }
 
 export interface PracticePlan {
@@ -37,16 +38,8 @@ export interface PracticePlan {
   counts: Record<PracticeDimension, number>
 }
 
-const GENERATED_CAP_PER_LESSON = 3
-
-function buildPracticePlanForLesson(lesson: Lesson, items: PracticeItem[], counts: Record<PracticeDimension, number>, used: Partial<Record<PracticeDimension, number>>) {
-  const push = (dimension: PracticeDimension, prompt: string, kind: 'textbook' | 'generated') => {
-    if (kind === 'generated') {
-      const cap = GENERATED_CAP_PER_LESSON
-      const n = (used[dimension] ?? 0)
-      if (n >= cap) return
-      used[dimension] = n + 1
-    }
+function buildPracticePlanForLesson(lesson: Lesson, items: PracticeItem[], counts: Record<PracticeDimension, number>) {
+  const push = (dimension: PracticeDimension, prompt: string, kind: 'textbook' | 'generated', exercise?: Exercise) => {
     counts[dimension]++
     items.push({
       id: `${lesson.id}-${dimension}-${counts[dimension]}`,
@@ -55,6 +48,7 @@ function buildPracticePlanForLesson(lesson: Lesson, items: PracticeItem[], count
       dimension,
       prompt,
       kind,
+      exercise,
     })
   }
 
@@ -62,7 +56,7 @@ function buildPracticePlanForLesson(lesson: Lesson, items: PracticeItem[], count
     const cls = classifyExercise(ex.prompt)
     if (cls.practice === 'other') continue
     const p = cls.practice as PracticeDimension
-    push(p, ex.prompt, 'textbook')
+    push(p, ex.prompt, 'textbook', ex)
   }
 
   const m = lesson.materials
@@ -82,13 +76,10 @@ function buildPracticePlanForLesson(lesson: Lesson, items: PracticeItem[], count
 export function buildPracticePlan(course: Course): PracticePlan {
   const items: PracticeItem[] = []
   const counts: Record<PracticeDimension, number> = { vocabulary: 0, grammar: 0, listening: 0, reading: 0, hearing: 0, speaking: 0 }
-  const usedByLesson = new Map<string, Partial<Record<PracticeDimension, number>>>()
 
   const allLessons = course.modules.flatMap((m) => m.lessons)
   for (const lesson of allLessons) {
-    const used: Partial<Record<PracticeDimension, number>> = {}
-    usedByLesson.set(lesson.id, used)
-    buildPracticePlanForLesson(lesson, items, counts, used)
+    buildPracticePlanForLesson(lesson, items, counts)
   }
 
   const claimedAudio = new Set<string>()

@@ -1,0 +1,20 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="60" cy="104" rx="14" ry="5" fill="rgba(0,0,0,0.18)" />
+  <ellipse cx="60" cy="78" rx="22" ry="26" fill="url(#grad-body)" />
+  <defs>
+    <linearGradient id="grad-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#059669" />
+      <stop offset="1" stopColor="#10B981" />
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="50" r="18" fill="url(#grad-body)" />
+  <circle cx="53" cy="48" r="3.2" fill="#0F172A" />
+  <circle cx="67" cy="48" r="3.2" fill="#0F172A" />
+  <path d="M58 58 L62 58 C63.2 58 64 58.8 63.2 59.8 C62.4 60.8 57.6 60.8 57 59.8 C56.2 58.8 57 58 58 58 Z" fill="url(#grad-beak)" />
+  <defs>
+    <linearGradient id="grad-beak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#F59E0B" />
+      <stop offset="1" stopColor="#D97706" />
+    </linearGradient>
+  </defs>
+</svg>

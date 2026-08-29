@@ -10,8 +10,12 @@ export interface UploadedAsset {
   size: number
   path?: string
   text?: string
+  dataUrl?: string
   durationSec?: number
   words?: number
+  objectKey?: string
+  /** Total number of pages in a page-bearing document (PDFs set during parsing). */
+  pageCount?: number
 }
 
 export interface ConceptNode {
@@ -52,13 +56,27 @@ export interface GrammarRule {
   sourceAssets: string[]
 }
 
+export type ExerciseType = 'fill-blank' | 'multiple-choice' | 'translation' | 'recall' | 'pattern-drill' | 'roleplay' | 'comprehension' | 'assessment'
+
 export interface Exercise {
   id: string
-  type: 'fill-blank' | 'multiple-choice' | 'translation' | 'recall' | 'pattern-drill' | 'roleplay' | 'comprehension' | 'assessment'
+  type: ExerciseType
   prompt: string
   answer?: string
   options?: string[]
+  /** Exact source page of the exercise in the uploaded material, e.g. "S. 34" or "p. 34" */
+  page?: string
+  /** Exact exercise name/label as printed in the uploaded material, e.g. "Aufgabe 5a", "Übung 3b" */
+  name?: string
   sourceAssets: string[]
+  /** Unified exercise object (Learning Material Relationship Engine): audio assets linked across all uploaded files. */
+  requiredAudio?: string[]
+  /** Unified exercise object (Learning Material Relationship Engine): video assets linked across all uploaded files. */
+  requiredVideo?: string[]
+  /** Unified exercise object (Learning Material Relationship Engine): page-bearing assets containing the required reading passage. */
+  requiredReadings?: string[]
+  /** Unified exercise object (Learning Material Relationship Engine): solution snippets located in handbooks/reference files. */
+  solutions?: string[]
 }
 
 export interface LessonMaterials {
@@ -127,7 +145,17 @@ export interface Course {
     concepts: number
     duplicatesMerged: number
   }
-  sourceFiles: { id: string; name: string; kind: AssetKind; words: number; path?: string; role?: string }[]
+  sourceFiles: { id: string; name: string; kind: AssetKind; words: number; size?: number; path?: string; role?: string; durationSec?: number; text?: string; dataUrl?: string; objectKey?: string; pageCount?: number }[]
+  /** Result of the pre-publish cleaning gate, attached when the course is assembled. */
+  publishReport?: CoursePublishReport
+}
+
+export interface CoursePublishReport {
+  extracted: number
+  published: number
+  cleaned: number
+  rejected: number
+  reasons: Record<string, number>
 }
 
 export interface ChapterPart {
@@ -145,7 +173,12 @@ export interface Discovery {
   vocabulary: { term: string; definition?: string; example?: string }[]
   grammar: { name: string; explanation?: string; examples: string[] }[]
   objectives: string[]
-  exercises: { type: string; prompt: string }[]
+  headings: { text: string; page: string }[]
+  text_blocks: { text: string; page: string }[]
+  image_refs: { text: string; page: string }[]
+  audio_refs: { text: string; page: string }[]
+  video_refs: { text: string; page: string }[]
+  exercises: { type: string; prompt: string; page?: string; name?: string }[]
   dialogues: string[]
   sentences: string[]
   role?: string
