@@ -32,6 +32,17 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
+.env.production
+
+# Google Cloud credentials - NEVER commit
+*credentials*.json
+*service-account*.json
+gcp-credentials.json
+**/gcp-credentials.json
+**/google-*.json
+**/woodpecker-*.json
+!/.github
 
 # vercel
 .vercel
@@ -39,3 +50,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# python extraction services (moved inside project as docling-extraction-service)
+docling-extraction-service/.venv/
+docling-extraction-service/.venv/**
+docling-extraction-service/__pycache__/
+docling-extraction-service/.pytest_cache/
+docling-extraction-service/outputs/
+docling-extraction-service/uploads/
+docling-extraction-service/build/
+docling-extraction-service/.artifacts/
+docling-extraction-service/llamacpp/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/

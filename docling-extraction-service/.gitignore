@@ -1,0 +1,27 @@
+# docling-extraction-service git ignores (separate from .dockerignore)
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+outputs/
+uploads/
+.artifacts/
+*.log
+.env
+.env.*
+!.env.example
+llamacpp/
+
+# Google Cloud credentials - never commit service-account JSON files
+*credentials*.json
+*service-account*.json
+gcp-credentials.json
+google-*.json
+woodpecker-*.json

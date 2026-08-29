@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "woodpacker-extraction"
+version = "0.1.0"
+description = "Woodpacker Learning Material Intelligence Agent (extraction + relationship engine)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "pymupdf>=1.24",
+  "pillow>=10",
+  "pydantic>=2",
+  "sqlalchemy>=2.0",
+  "psycopg2-binary>=2.9",
+  "minio>=7.2",
+  "openrouter",
+  "python-dotenv>=1.0",
+  "langgraph>=0.2",
+  "langchain-core>=1.0",
+  "langchain-openai>=1.0",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+  "google-cloud-documentai>=0.20",
+]
+
+[project.optional-dependencies]
+# OCR stack is NOT part of the default image: surya pulls torch (~2GB+).
+# Install with `pip install -e ".[ocr]"` or build the *-ocr image variant.
+ocr = [
+  "surya-ocr>=0.20",
+  "opencv-python-headless>=4.9",
+]
+dev = ["pytest>=8"]
+
+[project.scripts]
+woodpacker-extract = "woodpacker_extraction.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+woodpacker_extraction = ["py.typed"]

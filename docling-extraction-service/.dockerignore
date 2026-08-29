@@ -1,0 +1,56 @@
+# ---- Python artifacts ----
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Tests & fixtures (CI mounts or build-contexts these separately) ----
+tests/
+smoke_test.py
+
+# ---- Local ML binaries (Windows DLLs; injected via LLAMA_CPP_BINARY/volume) ----
+llamacpp/
+
+# ---- Course media: NEVER bake uploads into the image ----
+*.pdf
+*.mp3
+*.mp4
+*.wav
+*.m4a
+*.aac
+*.ogg
+*.flac
+*.docx
+*.pptx
+*.epub
+Kursbuch.txt
+Loesungen.txt
+Ubungsbuch.txt
+
+# ---- Lockfiles are included explicitly by the Dockerfile; keep context lean ----
+requirements.lock
+
+# ---- Env / secrets / logs / VCS / IDE ----
+.env
+.env.*
+!.env.example
+*.log
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# ---- Google Cloud credentials - NEVER bake into image ----
+*credentials*.json
+*service-account*.json
+gcp-credentials.json
+google-*.json
+woodpecker-*.json

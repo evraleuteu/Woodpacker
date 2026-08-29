@@ -1,0 +1,378 @@
+services:
+
+  postgres:
+    image: postgres:18
+    container_name: woodpacker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8
+    container_name: woodpacker-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    # noeviction: queue data must never be evicted under memory pressure.
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: woodpacker-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Python Extraction Service (legacy layout-first + LLM exercise pipeline)
+  # Was: extraction-service (../extraction-service) → now ./docling-extraction-service
+  # Single source image (./docling-extraction-service) with overridden command:
+  #   python -m woodpacker_extraction.server (port 8001)
+  # ---------------------------------------------------------------
+  python-extraction-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-python-extraction
+    restart: unless-stopped
+    command: ["python", "-m", "woodpacker_extraction.server"]
+    # Keep legacy hostname `extraction-service` resolvable for old clients/envs
+    networks:
+      default:
+        aliases:
+          - extraction-service
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./docling-extraction-service/outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Docling Extraction Service (generic PDF/DOCX/PPTX → markdown/blocks/tables)
+  # Was: docling (../extraction-service, port 8002) → now docling-extraction-service
+  # Single source image (./docling-extraction-service) running app:app (port 8001)
+  # ---------------------------------------------------------------
+  docling-extraction-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-docling-extraction
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - docling
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+    ports:
+      - "8002:8001"
+    volumes:
+      - ./docling-extraction-service/outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+      - docling_outputs:/app/outputs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # PyMuPDF Inspector — text extraction baseline (no OCR)
+  # Stateless baseline: pure PyMuPDF text layer + table/image rects
+  # Force provider: pymupdf (overrides has_text_layer check via patched __init__.py)
+  # No LLM — isolated outputs volume for fair benchmarking
+  # ---------------------------------------------------------------
+  pymupdf-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-pymupdf
+    restart: unless-stopped
+    command: ["python", "-m", "woodpacker_extraction.server"]
+    networks:
+      default:
+        aliases:
+          - pymupdf
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+      LAYOUT_FORCE_PROVIDER: pymupdf
+      LAYOUT_PROVIDER_ORDER: pymupdf
+      # Disable LLM/vision for pure baseline (benchmark must not call OpenRouter)
+      OPENCODE_API_KEY: ""
+      OPENCODE_MODEL: ""
+      OPENCODE_VISION_MODEL: ""
+    ports:
+      - "8003:8001"
+    volumes:
+      - pymupdf_outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Surya Inspector — OCR + layout detection baseline (Surya LayoutPredictor)
+  # Stateless baseline: Surya VLM layout for ALL pages (forced, even digital)
+  # ---------------------------------------------------------------
+  surya-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-surya
+    restart: unless-stopped
+    command: ["python", "-m", "woodpacker_extraction.server"]
+    networks:
+      default:
+        aliases:
+          - surya
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+      LAYOUT_FORCE_PROVIDER: surya
+      LAYOUT_PROVIDER_ORDER: surya
+      OPENCODE_API_KEY: ""
+      OPENCODE_MODEL: ""
+      OPENCODE_VISION_MODEL: ""
+    ports:
+      - "8004:8001"
+    volumes:
+      - surya_outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # PP-Structure Inspector — advanced document structure (PaddleOCR PP-StructureV3)
+  # Stateless: PP-StructureV3 region segmentation + table detection
+  # Note: paddleocr is optional heavy dep — health will report unconfigured if not installed
+  # ---------------------------------------------------------------
+  pp-structure-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-pp-structure
+    restart: unless-stopped
+    command: ["python", "-m", "woodpacker_extraction.server"]
+    networks:
+      default:
+        aliases:
+          - pp-structure
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+      LAYOUT_FORCE_PROVIDER: paddle_structure
+      LAYOUT_PROVIDER_ORDER: paddle_structure
+      OPENCODE_API_KEY: ""
+      OPENCODE_MODEL: ""
+      OPENCODE_VISION_MODEL: ""
+    ports:
+      - "8005:8001"
+    volumes:
+      - pp_structure_outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Google Document AI Inspector — enterprise/commercial benchmark
+  # Stateless: Google Document AI processor — requires GCP credentials
+  # Visible even when unconfigured (no silent fallback per spec)
+  # ---------------------------------------------------------------
+  google-docai-service:
+    build:
+      context: ./docling-extraction-service
+      dockerfile: Dockerfile
+    container_name: woodpacker-google-docai
+    restart: unless-stopped
+    command: ["python", "-m", "woodpacker_extraction.server"]
+    networks:
+      default:
+        aliases:
+          - google-docai
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: woodpacker-files
+      PORT: 8001
+      HOST: "0.0.0.0"
+      LAYOUT_FORCE_PROVIDER: documentai
+      LAYOUT_PROVIDER_ORDER: documentai
+      DOCAI_MODE: pdf
+      # GCP vars from host .env.local if set; empty by default
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google/credentials.json
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      DOCAI_OCR_PROCESSOR_ID: ${DOCAI_OCR_PROCESSOR_ID:-}
+      DOCAI_LAYOUT_PROCESSOR_ID: ${DOCAI_LAYOUT_PROCESSOR_ID:-}
+      DOCAI_LOCATION: ${DOCAI_LOCATION:-eu}
+      OPENCODE_API_KEY: ""
+      OPENCODE_MODEL: ""
+      OPENCODE_VISION_MODEL: ""
+    ports:
+      - "8006:8001"
+    volumes:
+      - google_docai_outputs:/app/outputs
+      - ./docling-extraction-service/uploads:/app/uploads
+      # Mount GCP credentials securely; never copy them into the image.
+      - type: bind
+        source: ${GOOGLE_APPLICATION_CREDENTIALS}
+        target: /run/secrets/google/credentials.json
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: woodpacker-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Canonical URLs (renamed services) — 6 inspectors + pipeline
+      PYTHON_EXTRACTION_SERVICE_URL: http://python-extraction-service:8001
+      DOCLING_EXTRACTION_SERVICE_URL: http://docling-extraction-service:8001
+      PYMUPDF_SERVICE_URL: http://pymupdf-service:8001
+      SURYA_SERVICE_URL: http://surya-service:8001
+      PP_STRUCTURE_SERVICE_URL: http://pp-structure-service:8001
+      GOOGLE_DOCAI_SERVICE_URL: http://google-docai-service:8001
+      # LLM+Vision is the high-quality benchmark (same host as python-extraction-service)
+      LLM_VISION_SERVICE_URL: http://python-extraction-service:8001
+      # Legacy alias — kept for backward compatibility with existing code that reads EXTRACTION_SERVICE_URL
+      EXTRACTION_SERVICE_URL: http://python-extraction-service:8001
+      EXTRACTION_USER_ID: ${EXTRACTION_USER_ID:-local@woodpacker.local}
+      PORT: 4000
+      ALLOW_DEV_TOKEN: "true"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      python-extraction-service:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  docling_outputs:
+  pymupdf_outputs:
+  surya_outputs:
+  pp_structure_outputs:
+  google_docai_outputs:
